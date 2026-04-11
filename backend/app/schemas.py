@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from typing import List, Optional
 
 
 # Request schema for creating system
@@ -26,10 +27,15 @@ class AnalysisRequest(BaseModel):
 class AnalysisResponse(BaseModel):
     threat: str
     category: str
-    stride: str | None = "Tampering"
+    stride: Optional[str] = "Tampering"
     risk_level: str
     likelihood: str
     impact: str
     risk_score: int
-    confidence: int | None = None
+    confidence: Optional[int] = None
     mitigation: str
+
+    # Enrichment fields — optional for backward compatibility
+    why_flagged:      Optional[str]       = None
+    attack_impact:    Optional[List[str]] = None
+    mitigation_steps: Optional[List[str]] = None

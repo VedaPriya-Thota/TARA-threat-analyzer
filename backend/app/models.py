@@ -23,7 +23,7 @@ class AnalysisResult(Base):
     category = Column(String(255))
     risk_level = Column(String(50))
     stride = Column(String(50))
-    
+
     # Dynamic Scoring Fields
     likelihood = Column(String(50), default="Medium")
     impact = Column(String(50), default="Medium")
@@ -31,3 +31,8 @@ class AnalysisResult(Base):
     confidence = Column(Integer, nullable=True)
 
     mitigation = Column(Text)
+
+    # ── New enrichment fields (nullable for backward compatibility) ──
+    why_flagged     = Column(Text, nullable=True)
+    attack_impact   = Column(Text, nullable=True)   # JSON-encoded list of strings
+    mitigation_steps = Column(Text, nullable=True)  # JSON-encoded list of strings

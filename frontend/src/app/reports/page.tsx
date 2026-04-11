@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Sidebar from "../components/Sidebar";
-import { 
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell 
+import BackToHome from "../components/BackToHome";
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid
 } from "recharts";
-import { 
+import {
   AlertTriangle, ShieldAlert, Target, ShieldCheck, Download, AlertCircle, TrendingUp, Cpu
 } from "lucide-react";
 
@@ -20,9 +21,7 @@ export default function ReportsPage() {
         setLoading(true);
         const res = await fetch("http://127.0.0.1:8000/analysis/history");
         const data = await res.json();
-        
         console.log("Report data:", data);
-
         if (Array.isArray(data) && data.length > 0) {
           setReportData(data);
         } else {
@@ -38,186 +37,213 @@ export default function ReportsPage() {
     fetchReport();
   }, []);
 
-  // Compute Metrics if we have data
   const totalThreats = reportData.length;
-  
-  // Risk Counts
   const riskCounts = { Critical: 0, High: 0, Medium: 0, Low: 0 };
   let totalScore = 0;
   let totalConfidence = 0;
-  
-  // Trackers for AI Insights
   let highestRiskThreat = reportData[0];
   const strideFreq: Record<string, number> = {};
   const mitigationsSet = new Set<string>();
 
   reportData.forEach((threat) => {
-    // Counts
     const rl = threat.risk_level === "Critical" ? "Critical" :
                threat.risk_level === "High" ? "High" :
                threat.risk_level === "Medium" ? "Medium" : "Low";
     riskCounts[rl]++;
-    
-    // Averages
     totalScore += threat.risk_score || 0;
     totalConfidence += threat.confidence || 0;
-
-    // Highest Risk tracking
     if (!highestRiskThreat || threat.risk_score > highestRiskThreat.risk_score) {
       highestRiskThreat = threat;
     }
-
-    // STRIDE Freq
     const stride = threat.stride || "Unknown";
     strideFreq[stride] = (strideFreq[stride] || 0) + 1;
-
-    // Mitigations
-    if (threat.mitigation) {
-      mitigationsSet.add(threat.mitigation);
-    }
+    if (threat.mitigation) mitigationsSet.add(threat.mitigation);
   });
 
   const avgRisk = totalThreats > 0 ? (totalScore / totalThreats) : 0;
   const avgConfidence = totalThreats > 0 ? (totalConfidence / totalThreats) : 0;
-  
   const mostCommonStride = Object.entries(strideFreq).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/A";
-  
   const overallRiskLevel = avgRisk > 15 ? "High" : avgRisk >= 8 ? "Medium" : "Low";
-  const overallRiskColor = overallRiskLevel === "High" ? "text-orange-500" :
-                           overallRiskLevel === "Medium" ? "text-yellow-500" : "text-green-500";
 
-  // System context
+  const overallRiskStyle = overallRiskLevel === "High"
+    ? { color: "#f97316", bg: "rgba(249,115,22,.1)", border: "rgba(249,115,22,.25)" }
+    : overallRiskLevel === "Medium"
+    ? { color: "#f59e0b", bg: "rgba(245,158,11,.1)", border: "rgba(245,158,11,.25)" }
+    : { color: "#22c55e", bg: "rgba(34,197,94,.1)",  border: "rgba(34,197,94,.25)"  };
+
   const latestSystemDesc = totalThreats > 0 ? reportData[reportData.length - 1].system_description : "N/A";
 
-  // Chart Formatting
   const chartData = [
     { name: "Critical", threats: riskCounts.Critical, color: "#ef4444" },
-    { name: "High", threats: riskCounts.High, color: "#f97316" },
-    { name: "Medium", threats: riskCounts.Medium, color: "#eab308" },
-    { name: "Low", threats: riskCounts.Low, color: "#22c55e" },
+    { name: "High",     threats: riskCounts.High,     color: "#f97316" },
+    { name: "Medium",   threats: riskCounts.Medium,   color: "#eab308" },
+    { name: "Low",      threats: riskCounts.Low,       color: "#22c55e" },
   ];
 
   const getRiskBadge = (level: string) => {
     switch (level?.toLowerCase()) {
-      case "critical": return <span className="bg-red-500/20 text-red-500 px-2 py-1 rounded-md text-xs font-semibold whitespace-nowrap">Critical</span>;
-      case "high": return <span className="bg-orange-500/20 text-orange-500 px-2 py-1 rounded-md text-xs font-semibold whitespace-nowrap">High</span>;
-      case "medium": return <span className="bg-yellow-500/20 text-yellow-500 px-2 py-1 rounded-md text-xs font-semibold whitespace-nowrap">Medium</span>;
-      case "low": return <span className="bg-green-500/20 text-green-500 px-2 py-1 rounded-md text-xs font-semibold whitespace-nowrap">Low</span>;
-      default: return <span className="bg-gray-500/20 text-gray-400 px-2 py-1 rounded-md text-xs font-semibold whitespace-nowrap">{level || "Unknown"}</span>;
+      case "critical": return <span style={{background:"rgba(239,68,68,.12)",color:"#ef4444",border:"1px solid rgba(239,68,68,.25)"}} className="px-2.5 py-1 rounded-full text-xs font-bold whitespace-nowrap">Critical</span>;
+      case "high":     return <span style={{background:"rgba(249,115,22,.12)",color:"#f97316",border:"1px solid rgba(249,115,22,.25)"}} className="px-2.5 py-1 rounded-full text-xs font-bold whitespace-nowrap">High</span>;
+      case "medium":   return <span style={{background:"rgba(245,158,11,.12)",color:"#f59e0b",border:"1px solid rgba(245,158,11,.25)"}} className="px-2.5 py-1 rounded-full text-xs font-bold whitespace-nowrap">Medium</span>;
+      case "low":      return <span style={{background:"rgba(34,197,94,.12)", color:"#22c55e",border:"1px solid rgba(34,197,94,.25)}"}} className="px-2.5 py-1 rounded-full text-xs font-bold whitespace-nowrap">Low</span>;
+      default:         return <span className="bg-slate-700/50 text-slate-400 px-2.5 py-1 rounded-full text-xs font-bold whitespace-nowrap">{level || "Unknown"}</span>;
     }
   };
 
-  const handleDownloadPdf = () => {
-    // Placeholder trigger for PDF export (jspdf mapping available here)
-    window.print(); 
-  };
+  const handleDownloadPdf = () => { window.print(); };
+
+  /* ── Summary card config ── */
+  const SUMMARY_CARDS = [
+    { label: "Critical", count: riskCounts.Critical, Icon: AlertTriangle, color: "#ef4444", bg: "rgba(239,68,68,.08)", border: "rgba(239,68,68,.18)", glow: "rgba(239,68,68,.06)" },
+    { label: "High",     count: riskCounts.High,     Icon: ShieldAlert,   color: "#f97316", bg: "rgba(249,115,22,.08)", border: "rgba(249,115,22,.18)", glow: "rgba(249,115,22,.06)" },
+    { label: "Medium",   count: riskCounts.Medium,   Icon: Target,        color: "#f59e0b", bg: "rgba(245,158,11,.08)", border: "rgba(245,158,11,.18)", glow: "rgba(245,158,11,.06)" },
+    { label: "Low",      count: riskCounts.Low,       Icon: ShieldCheck,   color: "#22c55e", bg: "rgba(34,197,94,.08)",  border: "rgba(34,197,94,.18)",  glow: "rgba(34,197,94,.06)"  },
+  ];
 
   return (
-    <div className="flex bg-slate-950 min-h-screen text-slate-200 font-sans">
+    <div
+      className="flex min-h-screen text-slate-200 font-sans"
+      style={{ background: "radial-gradient(ellipse at 80% 0%, rgba(30,42,88,.5) 0%, #050712 55%)" }}
+    >
+      <BackToHome />
       <Sidebar />
 
       <main className="flex-1 p-8 lg:p-12 overflow-x-hidden">
         <div className="max-w-7xl mx-auto space-y-8" id="report-container">
-          
+
           {loading ? (
             <div className="flex flex-col items-center justify-center p-20 min-h-[50vh]">
-              <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+              <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
               <p className="mt-4 text-slate-400 font-medium">Analyzing intelligence...</p>
             </div>
           ) : error ? (
-            <div className="flex flex-col items-center justify-center p-20 bg-slate-900 border border-slate-800 rounded-2xl">
+            <div className="flex flex-col items-center justify-center p-20 rounded-2xl" style={{ background: "rgba(10,15,28,.85)", border: "1px solid rgba(30,41,59,.9)" }}>
               <AlertCircle className="w-12 h-12 text-red-400 mb-4 opacity-50" />
               <p className="font-medium text-lg text-red-400">{error}</p>
             </div>
           ) : totalThreats === 0 ? (
-            <div className="flex flex-col items-center justify-center p-20 bg-slate-900 border border-slate-800 rounded-2xl">
+            <div className="flex flex-col items-center justify-center p-20 rounded-2xl" style={{ background: "rgba(10,15,28,.85)", border: "1px solid rgba(30,41,59,.9)" }}>
               <ShieldCheck className="w-12 h-12 text-slate-500 mb-4 opacity-50" />
               <p className="font-medium text-lg text-slate-500">No analysis data available.</p>
             </div>
           ) : (
             <>
-              {/* SECTION 1: HEADER */}
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 border-b border-slate-800 pb-6">
+              {/* ── SECTION 1: HEADER ── */}
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-5 pb-6" style={{ borderBottom: "1px solid rgba(30,41,59,.8)" }}>
                 <div>
-                  <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-400">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#818cf8", boxShadow: "0 0 6px #818cf8", display: "inline-block" }} />
+                    <span className="text-xs font-bold uppercase tracking-widest text-indigo-400">Security Report</span>
+                  </div>
+                  <h1 className="text-3xl font-black tracking-tight bg-clip-text text-transparent"
+                    style={{ backgroundImage: "linear-gradient(135deg, #818cf8, #c084fc)" }}>
                     Security Threat Report
                   </h1>
-                  <p className="text-slate-400 mt-2 text-lg">System: <span className="text-slate-200 font-semibold">{latestSystemDesc}</span></p>
-                  <p className="text-slate-500 text-sm mt-1">Generated: {new Date().toLocaleString()}</p>
+                  <p className="text-slate-400 mt-1.5 text-sm">
+                    System: <span className="text-slate-200 font-semibold">{latestSystemDesc}</span>
+                  </p>
+                  <p className="text-slate-600 text-xs mt-0.5">Generated: {new Date().toLocaleString()}</p>
                 </div>
-                <button 
+
+                <button
                   onClick={handleDownloadPdf}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition shadow-xl shadow-indigo-900/20 font-medium"
+                  className="flex items-center gap-2.5 font-semibold text-sm text-white transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 whitespace-nowrap"
+                  style={{
+                    background: "linear-gradient(135deg, #4f46e5, #7c3aed)",
+                    padding: "10px 20px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(129,140,248,.3)",
+                    boxShadow: "0 0 20px rgba(79,70,229,.25), 0 4px 12px rgba(0,0,0,.3)",
+                  }}
                 >
-                  <Download size={18} /> Download PDF
+                  <Download size={16} />
+                  Download PDF
                 </button>
               </div>
 
-              {/* BONUS: Most Critical Alert Box */}
+              {/* ── CRITICAL ALERT BANNER ── */}
               {highestRiskThreat && highestRiskThreat.risk_level === "Critical" && (
-                <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-5 flex items-start gap-4">
-                  <AlertTriangle className="text-red-500 mt-1 shrink-0" />
-                  <div>
-                    <h3 className="text-red-400 font-bold text-lg">Critical Threat Detected</h3>
-                    <p className="text-red-200/80 mt-1">
-                      <span className="font-semibold text-white">{highestRiskThreat.threat}</span> introduces severe risk (Score: {highestRiskThreat.risk_score}). Immediate mitigation required.
-                    </p>
+                <div style={{
+                  background: "rgba(239,68,68,.07)",
+                  border: "1px solid rgba(239,68,68,.3)",
+                  borderLeft: "3px solid #ef4444",
+                  borderRadius: 12,
+                  padding: "16px 20px",
+                }}>
+                  <div className="flex items-start gap-3">
+                    <div style={{ background: "rgba(239,68,68,.15)", borderRadius: 8, padding: 7, flexShrink: 0, marginTop: 1 }}>
+                      <AlertTriangle size={16} style={{ color: "#ef4444" }} />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-base" style={{ color: "#f87171" }}>Critical Threat Detected</h3>
+                      <p className="text-sm mt-1 leading-relaxed" style={{ color: "rgba(254,202,202,.75)" }}>
+                        <span className="font-semibold text-white">{highestRiskThreat.threat}</span>
+                        {" "}introduces severe risk (Score: <span className="font-bold text-red-300">{highestRiskThreat.risk_score}</span>). Immediate mitigation required.
+                      </p>
+                    </div>
                   </div>
                 </div>
               )}
 
-              {/* SECTION 2: RISK SUMMARY CARDS */}
+              {/* ── SECTION 2: RISK SUMMARY CARDS ── */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 w-16 h-16 bg-red-500/10 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
-                  <AlertTriangle className="text-red-500 mb-3" size={24} />
-                  <p className="text-slate-400 text-sm font-medium">Critical</p>
-                  <p className="text-3xl font-bold text-slate-100 mt-1">{riskCounts.Critical}</p>
-                </div>
-                
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 w-16 h-16 bg-orange-500/10 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
-                  <ShieldAlert className="text-orange-500 mb-3" size={24} />
-                  <p className="text-slate-400 text-sm font-medium">High</p>
-                  <p className="text-3xl font-bold text-slate-100 mt-1">{riskCounts.High}</p>
-                </div>
-
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 w-16 h-16 bg-yellow-500/10 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
-                  <Target className="text-yellow-500 mb-3" size={24} />
-                  <p className="text-slate-400 text-sm font-medium">Medium</p>
-                  <p className="text-3xl font-bold text-slate-100 mt-1">{riskCounts.Medium}</p>
-                </div>
-
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 w-16 h-16 bg-green-500/10 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110"></div>
-                  <ShieldCheck className="text-green-500 mb-3" size={24} />
-                  <p className="text-slate-400 text-sm font-medium">Low</p>
-                  <p className="text-3xl font-bold text-slate-100 mt-1">{riskCounts.Low}</p>
-                </div>
+                {SUMMARY_CARDS.map(({ label, count, Icon, color, bg, border, glow }) => (
+                  <div
+                    key={label}
+                    className="relative overflow-hidden rounded-2xl transition-all duration-200 hover:-translate-y-0.5 group"
+                    style={{ background: "rgba(10,15,28,.9)", border: `1px solid ${border}`, padding: "20px 22px" }}
+                  >
+                    {/* Corner accent */}
+                    <div className="absolute top-0 right-0 w-20 h-20 rounded-bl-full transition-transform duration-300 group-hover:scale-110"
+                      style={{ background: glow, marginTop: -16, marginRight: -16 }} />
+                    {/* Icon */}
+                    <div className="mb-3 relative" style={{ display: "inline-flex", padding: 8, borderRadius: 10, background: `${color}14`, border: `1px solid ${color}22` }}>
+                      <Icon size={18} style={{ color }} />
+                    </div>
+                    <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: "#475569" }}>{label}</p>
+                    <p className="text-3xl font-black" style={{ color: count > 0 ? color : "#1e293b" }}>{count}</p>
+                    <p className="text-xs mt-1" style={{ color: "#1e3a52" }}>
+                      {count === 0 ? "None detected" : `${Math.round((count / totalThreats) * 100)}% of total`}
+                    </p>
+                  </div>
+                ))}
               </div>
 
+              {/* ── SECTION 3+5: CHART + AI INSIGHTS ── */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                
-                {/* SECTION 3: RISK VISUALIZATION */}
-                <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-6">
-                  <h3 className="text-lg font-semibold text-slate-200 mb-6 flex items-center gap-2">
-                    <TrendingUp size={20} className="text-indigo-400"/>
-                    Risk Distribution
-                  </h3>
-                  <div className="h-64 w-full">
+
+                {/* Risk Distribution Chart */}
+                <div className="lg:col-span-2 rounded-2xl" style={{ background: "rgba(10,15,28,.9)", border: "1px solid rgba(30,41,59,.9)", padding: "22px 24px" }}>
+                  <div className="flex items-center gap-2 mb-6">
+                    <div style={{ background: "rgba(99,102,241,.15)", padding: 7, borderRadius: 9, display: "inline-flex" }}>
+                      <TrendingUp size={16} style={{ color: "#818cf8" }} />
+                    </div>
+                    <h3 className="font-bold text-base text-slate-200">Risk Distribution</h3>
+                    <span className="ml-auto text-xs font-medium px-2.5 py-1 rounded-full"
+                      style={{ color: "#475569", background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.05)" }}>
+                      {totalThreats} threats
+                    </span>
+                  </div>
+                  <div className="h-56 w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={chartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                        <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
-                        <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
-                        <Tooltip 
-                          cursor={{fill: '#1e293b'}} 
-                          contentStyle={{backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '8px'}}
-                          itemStyle={{color: '#f8fafc', fontWeight: 'bold'}}
+                      <BarChart data={chartData} margin={{ top: 8, right: 4, left: -18, bottom: 0 }} barCategoryGap="35%">
+                        <CartesianGrid vertical={false} stroke="rgba(255,255,255,.04)" strokeDasharray="3 0" />
+                        <XAxis dataKey="name" stroke="transparent" tick={{ fill: "#475569", fontSize: 11, fontWeight: 600 }} tickLine={false} axisLine={false} />
+                        <YAxis stroke="transparent" tick={{ fill: "#334155", fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} width={22} />
+                        <Tooltip
+                          cursor={{ fill: "rgba(255,255,255,.025)", radius: 4 }}
+                          contentStyle={{ backgroundColor: "rgba(7,11,22,.97)", border: "1px solid rgba(51,65,85,.6)", borderRadius: 10, fontSize: 12 }}
+                          itemStyle={{ color: "#e2e8f0", fontWeight: 700 }}
+                          labelStyle={{ color: "#64748b", fontWeight: 600 }}
                         />
-                        <Bar dataKey="threats" radius={[4, 4, 0, 0]} maxBarSize={60}>
-                          {chartData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
+                        <Bar dataKey="threats" radius={[6, 6, 0, 0]} maxBarSize={52}>
+                          {chartData.map((entry, i) => (
+                            <Cell
+                              key={i}
+                              fill={entry.color}
+                              opacity={entry.threats === 0 ? 0.2 : 1}
+                              style={entry.threats > 0 ? { filter: `drop-shadow(0 2px 6px ${entry.color}44)` } : undefined}
+                            />
                           ))}
                         </Bar>
                       </BarChart>
@@ -225,83 +251,103 @@ export default function ReportsPage() {
                   </div>
                 </div>
 
-                {/* SECTION 5: AI INSIGHTS */}
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between">
-                  <div>
-                    <h3 className="text-lg font-semibold text-slate-200 mb-6 flex items-center gap-2">
-                      <Cpu size={20} className="text-purple-400"/>
-                      AI Insights
-                    </h3>
-                    
-                    <div className="space-y-5">
-                      <div>
-                        <p className="text-slate-500 text-sm font-medium">Overall System Risk</p>
-                        <p className={`text-2xl font-bold mt-1 ${overallRiskColor}`}>{overallRiskLevel}</p>
-                        <p className="text-slate-400 text-xs mt-1">Avg Score: {avgRisk.toFixed(1)}</p>
+                {/* AI Insights */}
+                <div className="rounded-2xl flex flex-col gap-0" style={{ background: "rgba(10,15,28,.9)", border: "1px solid rgba(30,41,59,.9)", padding: "22px 24px" }}>
+                  <div className="flex items-center gap-2 mb-6">
+                    <div style={{ background: "rgba(192,132,252,.12)", padding: 7, borderRadius: 9, display: "inline-flex" }}>
+                      <Cpu size={16} style={{ color: "#c084fc" }} />
+                    </div>
+                    <h3 className="font-bold text-base text-slate-200">AI Insights</h3>
+                  </div>
+
+                  <div className="flex flex-col gap-4">
+                    {/* Overall Risk */}
+                    <div style={{ background: `${overallRiskStyle.bg}`, border: `1px solid ${overallRiskStyle.border}`, borderRadius: 10, padding: "12px 14px" }}>
+                      <p className="text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: "#334155" }}>Overall System Risk</p>
+                      <div className="flex items-center gap-2">
+                        <span style={{
+                          width: 8, height: 8, borderRadius: "50%",
+                          background: overallRiskStyle.color,
+                          boxShadow: `0 0 6px ${overallRiskStyle.color}`,
+                          flexShrink: 0, display: "inline-block",
+                        }} />
+                        <span className="text-xl font-black" style={{ color: overallRiskStyle.color }}>{overallRiskLevel}</span>
                       </div>
+                      <p className="text-xs mt-1" style={{ color: "#475569" }}>Avg score: <span style={{ color: overallRiskStyle.color, fontWeight: 700 }}>{avgRisk.toFixed(1)}</span></p>
+                    </div>
 
-                      <div className="h-px w-full bg-slate-800"></div>
+                    {/* Most Common Vector */}
+                    <div style={{ background: "rgba(255,255,255,.025)", borderRadius: 10, padding: "12px 14px" }}>
+                      <p className="text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: "#334155" }}>Most Common Vector</p>
+                      <p className="text-base font-bold" style={{ color: "#a5b4fc" }}>{mostCommonStride}</p>
+                      <p className="text-xs mt-0.5" style={{ color: "#334155" }}>{strideFreq[mostCommonStride] || 0} occurrence{(strideFreq[mostCommonStride] || 0) !== 1 ? "s" : ""}</p>
+                    </div>
 
-                      <div>
-                        <p className="text-slate-500 text-sm font-medium">Most Common Vector</p>
-                        <p className="text-indigo-300 text-lg font-semibold mt-1">{mostCommonStride}</p>
+                    {/* Avg AI Confidence */}
+                    <div style={{ background: "rgba(255,255,255,.025)", borderRadius: 10, padding: "12px 14px" }}>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#334155" }}>Avg AI Confidence</p>
+                        <span className="text-sm font-black" style={{ color: "#c084fc" }}>{Math.round(avgConfidence)}%</span>
                       </div>
-
-                      <div className="h-px w-full bg-slate-800"></div>
-                      
-                      {/* BONUS: Confidence Score */}
-                      <div>
-                        <p className="text-slate-500 text-sm font-medium">Avg AI Confidence</p>
-                        <div className="flex items-center gap-3 mt-2">
-                          <div className="h-2 flex-1 bg-slate-800 rounded-full overflow-hidden">
-                            <div className="h-full bg-purple-500 rounded-full" style={{width: `${Math.min(avgConfidence, 100)}%`}}></div>
-                          </div>
-                          <span className="text-purple-300 font-bold">{Math.round(avgConfidence)}%</span>
-                        </div>
+                      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,.06)" }}>
+                        <div
+                          className="h-full rounded-full"
+                          style={{
+                            width: `${Math.min(avgConfidence, 100)}%`,
+                            background: "linear-gradient(90deg, #7c3aed, #c084fc)",
+                            boxShadow: "0 0 8px rgba(192,132,252,.4)",
+                          }}
+                        />
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* SECTION 4: THREAT TABLE */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-                <div className="p-6 border-b border-slate-800">
-                  <h3 className="text-lg font-semibold text-slate-200">Identified Threats</h3>
+              {/* ── SECTION 4: THREAT TABLE ── */}
+              <div className="rounded-2xl overflow-hidden" style={{ background: "rgba(10,15,28,.9)", border: "1px solid rgba(30,41,59,.9)" }}>
+                <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: "1px solid rgba(30,41,59,.8)" }}>
+                  <div className="flex items-center gap-2">
+                    <div style={{ background: "rgba(99,102,241,.12)", padding: 6, borderRadius: 8, display: "inline-flex" }}>
+                      <ShieldAlert size={14} style={{ color: "#818cf8" }} />
+                    </div>
+                    <h3 className="font-bold text-base text-slate-200">Identified Threats</h3>
+                  </div>
+                  <span className="text-xs font-medium px-2.5 py-1 rounded-full" style={{ color: "#475569", background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.05)" }}>
+                    {totalThreats} total
+                  </span>
                 </div>
-                <div className="overflow-x-auto max-h-[400px]">
-                  <table className="w-full text-left text-sm whitespace-nowrap">
-                    <thead className="bg-slate-950/80 sticky top-0 backdrop-blur-sm z-10 text-slate-400 uppercase font-semibold text-xs tracking-wider">
+                <div className="overflow-x-auto" style={{ maxHeight: 400 }}>
+                  <table className="w-full text-left text-sm">
+                    <thead className="sticky top-0 z-10" style={{ background: "rgba(5,7,18,.97)", backdropFilter: "blur(8px)" }}>
                       <tr>
-                        <th className="px-6 py-4">Threat</th>
-                        <th className="px-6 py-4">STRIDE</th>
-                        <th className="px-6 py-4">Likelihood</th>
-                        <th className="px-6 py-4">Impact</th>
-                        <th className="px-6 py-4 text-center">Score</th>
-                        <th className="px-6 py-4 text-center">Risk Level</th>
-                        <th className="px-6 py-4 text-center">Conf.</th>
+                        {["Threat", "STRIDE", "Likelihood", "Impact", "Score", "Risk Level", "Conf."].map(h => (
+                          <th key={h} className="px-5 py-3.5 text-xs font-bold uppercase tracking-wider whitespace-nowrap" style={{ color: "#334155", borderBottom: "1px solid rgba(30,41,59,.8)" }}>
+                            {h}
+                          </th>
+                        ))}
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800/80">
+                    <tbody>
                       {reportData.map((h, i) => (
-                        <tr key={i} className="hover:bg-slate-800/30 transition-colors">
-                          <td className="px-6 py-4 text-slate-200 truncate max-w-[250px]" title={h.threat}>
-                            {h.threat}
+                        <tr
+                          key={i}
+                          className="transition-colors"
+                          style={{ borderBottom: "1px solid rgba(255,255,255,.03)" }}
+                          onMouseEnter={e => (e.currentTarget.style.background = "rgba(99,102,241,.04)")}
+                          onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                        >
+                          <td className="px-5 py-3.5 font-semibold text-slate-200 max-w-[220px] truncate" title={h.threat}>{h.threat}</td>
+                          <td className="px-5 py-3.5">
+                            <span className="text-xs font-semibold px-2 py-1 rounded-md" style={{ color: "#a5b4fc", background: "rgba(99,102,241,.1)", border: "1px solid rgba(99,102,241,.2)" }}>
+                              {h.stride}
+                            </span>
                           </td>
-                          <td className="px-6 py-4">
-                            <span className="text-slate-300 text-xs">{h.stride}</span>
-                          </td>
-                          <td className="px-6 py-4 text-slate-400">{h.likelihood}</td>
-                          <td className="px-6 py-4 text-slate-400">{h.impact}</td>
-                          <td className="px-6 py-4 text-center font-mono text-indigo-300">
-                            {h.risk_score}
-                          </td>
-                          <td className="px-6 py-4 flex justify-center">
-                            {getRiskBadge(h.risk_level)}
-                          </td>
-                          <td className="px-6 py-4 text-slate-500 text-xs text-center">
-                            {h.confidence || "N/A"}%
-                          </td>
+                          <td className="px-5 py-3.5 text-sm" style={{ color: "#475569" }}>{h.likelihood}</td>
+                          <td className="px-5 py-3.5 text-sm" style={{ color: "#475569" }}>{h.impact}</td>
+                          <td className="px-5 py-3.5 text-center font-mono font-bold text-sm" style={{ color: "#818cf8" }}>{h.risk_score}</td>
+                          <td className="px-5 py-3.5"><div className="flex justify-center">{getRiskBadge(h.risk_level)}</div></td>
+                          <td className="px-5 py-3.5 text-center text-xs font-semibold" style={{ color: "#334155" }}>{h.confidence || "N/A"}%</td>
                         </tr>
                       ))}
                     </tbody>
@@ -309,19 +355,28 @@ export default function ReportsPage() {
                 </div>
               </div>
 
-              {/* SECTION 6: RECOMMENDATIONS */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-                <h3 className="text-lg font-semibold text-slate-200 mb-6 flex items-center gap-2">
-                  <ShieldCheck size={20} className="text-green-400"/>
-                  Consolidated Mitigation Plan
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* ── SECTION 6: MITIGATION PLAN ── */}
+              <div className="rounded-2xl" style={{ background: "rgba(10,15,28,.9)", border: "1px solid rgba(30,41,59,.9)", padding: "22px 24px" }}>
+                <div className="flex items-center gap-2 mb-5">
+                  <div style={{ background: "rgba(34,197,94,.1)", padding: 7, borderRadius: 9, display: "inline-flex" }}>
+                    <ShieldCheck size={16} style={{ color: "#22c55e" }} />
+                  </div>
+                  <h3 className="font-bold text-base text-slate-200">Consolidated Mitigation Plan</h3>
+                  <span className="ml-auto text-xs font-medium px-2.5 py-1 rounded-full" style={{ color: "#475569", background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.05)" }}>
+                    {mitigationsSet.size} action{mitigationsSet.size !== 1 ? "s" : ""}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {Array.from(mitigationsSet).map((mitigation, idx) => (
-                    <div key={idx} className="flex items-start gap-3 bg-slate-950 p-4 rounded-lg border border-slate-800/50">
-                      <div className="mt-0.5 bg-green-500/20 p-1 rounded">
-                        <ShieldCheck size={14} className="text-green-500" />
+                    <div
+                      key={idx}
+                      className="flex items-start gap-3 rounded-xl transition-colors"
+                      style={{ background: "rgba(7,11,22,.7)", border: "1px solid rgba(30,41,59,.7)", padding: "14px 16px" }}
+                    >
+                      <div style={{ background: "rgba(34,197,94,.12)", border: "1px solid rgba(34,197,94,.2)", padding: 6, borderRadius: 8, flexShrink: 0, marginTop: 1 }}>
+                        <ShieldCheck size={12} style={{ color: "#22c55e" }} />
                       </div>
-                      <p className="text-slate-300 text-sm leading-relaxed">{mitigation}</p>
+                      <p className="text-sm leading-relaxed" style={{ color: "#94a3b8" }}>{mitigation}</p>
                     </div>
                   ))}
                 </div>

@@ -32,7 +32,15 @@ class AnalysisResult(Base):
 
     mitigation = Column(Text)
 
-    # ── New enrichment fields (nullable for backward compatibility) ──
-    why_flagged     = Column(Text, nullable=True)
-    attack_impact   = Column(Text, nullable=True)   # JSON-encoded list of strings
-    mitigation_steps = Column(Text, nullable=True)  # JSON-encoded list of strings
+    # Enrichment fields (nullable for backward compatibility)
+    why_flagged        = Column(Text, nullable=True)
+    attack_impact      = Column(Text, nullable=True)   # JSON list
+    mitigation_steps   = Column(Text, nullable=True)   # JSON list
+
+    # File analysis fields (nullable — only present for file-upload analyses)
+    evidence           = Column(Text, nullable=True)   # specific file excerpt
+    source_filename    = Column(String(255), nullable=True)  # original uploaded filename
+    mitigation_priority = Column(String(50), nullable=True)  # Immediate/High/Moderate/Low
+
+    # URL analysis fields (nullable — only present for URL surface analyses)
+    source_url         = Column(String(2048), nullable=True)  # analyzed URL

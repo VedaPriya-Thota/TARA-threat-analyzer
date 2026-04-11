@@ -464,14 +464,3 @@ TARA never returns an error to the user due to LLM unavailability:
    (context-specific hardcoded threats for Financial / IoT / General)
 ```
 
----
-
-## Future Enhancements
-
-- Multi-model support (GPT-4o, Claude, Gemini)
-- Architecture diagram upload (auto-extract components)
-- Real-time threat monitoring with webhook alerts
-- CVSS score integration
-- Team collaboration and shared workspaces
-- Export to JIRA / GitHub Issues
-- Compliance mapping (OWASP, NIST, ISO 27001)

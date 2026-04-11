@@ -23,12 +23,21 @@ if groq_key:
     try:
         groq_client = Groq(api_key=groq_key)
     except Exception as e:
-        print("❌ GROQ INIT ERROR:", e)
+        print("[GROQ INIT ERROR]", e)
 
 
 # =========================
-# 🔍 DETECT SYSTEM TYPE
+# 🔍 DETECT INPUT TYPE
 # =========================
+_USER_STORY_RE = re.compile(
+    r"(?i)(as\s+a\s+\w|i\s+want\s+to|so\s+that\s+|given\s+|when\s+i\s+|user\s+story|feature\s+request|requirement[:\s])",
+)
+
+def is_user_story(text: str) -> bool:
+    """Return True when the input looks like a user story or functional requirement."""
+    return bool(_USER_STORY_RE.search(text))
+
+
 def detect_context(system_description: str):
     desc = system_description.lower()
 
@@ -200,7 +209,7 @@ Rules:
         )
 
         text = response.choices[0].message.content
-        print("🧠 GROQ RAW:\n", text)
+        print("[GROQ RAW]:", text[:200])
 
         result = extract_json(text)
 
@@ -210,8 +219,151 @@ Rules:
         return result
 
     except Exception as e:
-        print("❌ GROQ ERROR:", e)
+        print("[GROQ ERROR]:", e)
         return None
+
+
+# =========================
+# USER STORY SECURITY REVIEW
+# =========================
+def call_groq_user_story(user_story: str) -> list[dict] | None:
+    """Shift-left security review of a user story or functional requirement."""
+    if not groq_client:
+        return None
+
+    prompt = f"""You are a senior application security engineer performing a shift-left security review.
+
+User Story / Functional Requirement:
+\"\"\"{user_story}\"\"\"
+
+Analyze this user story for security risks across:
+- Authentication & identity verification
+- Authorization & access control (who can perform the action, on whose data)
+- Workflow abuse & business logic flaws (can the flow be misused or replayed?)
+- Input validation & injection risks
+- Sensitive data exposure (what data is accessed, stored, or transmitted?)
+- Repudiation (is the action auditable? can users deny it?)
+- Race conditions or TOCTOU issues in the described workflow
+
+Return 3-6 realistic, SPECIFIC threats tied to the described user story.
+Each threat must reference the exact role, action, or technology named in the story.
+
+Return ONLY a valid JSON array — no markdown, no explanation, no code fences.
+
+Each element MUST contain exactly these fields:
+{{
+  "threat": "concise threat name tied to the story",
+  "category": "e.g. Authorization, Business Logic, Input Validation, Data Exposure, Repudiation",
+  "stride": "one of: Spoofing | Tampering | Repudiation | Information Disclosure | Denial of Service | Elevation of Privilege",
+  "likelihood": "High | Medium | Low",
+  "impact": "High | Medium | Low",
+  "confidence": <integer 0-100>,
+  "why_flagged": "1-2 sentences explaining why this user story introduces this specific risk",
+  "attack_impact": [
+    "concrete consequence 1 if exploited",
+    "concrete consequence 2 if exploited",
+    "concrete consequence 3 if exploited"
+  ],
+  "mitigation_steps": [
+    "Actionable step 1 referencing the story's role/action/technology",
+    "Actionable step 2",
+    "Actionable step 3"
+  ],
+  "mitigation": "one-sentence primary mitigation"
+}}
+
+Rules:
+- why_flagged must reference the role, action, or goal from the user story
+- attack_impact must describe real business consequences (data breach, fraud, account takeover, etc.)
+- mitigation_steps must be implementation-ready developer actions
+- Do NOT return generic threats unrelated to the story
+- Return only the JSON array, nothing else
+"""
+
+    try:
+        response = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": "You are a security engineer doing shift-left threat modeling. Return only valid JSON arrays. No markdown. No explanation."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.3,
+            max_tokens=2500,
+        )
+        text   = response.choices[0].message.content
+        print("[GROQ USER STORY RAW]:", text[:200])
+        result = extract_json(text)
+        if result:
+            return [normalize_threat(item) for item in result]
+        return None
+    except Exception as e:
+        print("[GROQ USER STORY ERROR]:", e)
+        return None
+
+
+def _user_story_fallback(user_story: str) -> list[dict]:
+    """Rule-based fallback threats for user story review."""
+    text = user_story.lower()
+    threats = []
+
+    # Authorization
+    threats.append(normalize_threat({
+        "threat":           "Missing object-level authorization check",
+        "category":         "Authorization",
+        "stride":           "Elevation of Privilege",
+        "likelihood":       "High",
+        "impact":           "High",
+        "confidence":       80,
+        "why_flagged":      "User story involves accessing or modifying a resource — without per-object checks any authenticated user may access another user's data.",
+        "attack_impact":    ["Horizontal privilege escalation to other users' records", "Data exposure of sensitive user information", "Regulatory violation (GDPR/HIPAA)"],
+        "mitigation_steps": ["Verify the requesting user owns or is authorized for the target resource before every operation", "Use parameterized ownership queries (e.g. WHERE user_id = :current_user AND id = :resource_id)", "Return 403 — not 404 — on authorization failure to avoid information leakage"],
+        "mitigation":       "Enforce object-level authorization on every resource access",
+    }))
+
+    # Repudiation
+    threats.append(normalize_threat({
+        "threat":           "Insufficient audit trail for sensitive action",
+        "category":         "Repudiation",
+        "stride":           "Repudiation",
+        "likelihood":       "Medium",
+        "impact":           "Medium",
+        "confidence":       75,
+        "why_flagged":      "The described action changes state or accesses sensitive data — without an audit log users can deny performing it.",
+        "attack_impact":    ["Users can deny performing the action in disputes", "Forensic investigation is impossible after an incident", "Compliance requirements unmet"],
+        "mitigation_steps": ["Log actor ID, timestamp, action type, and target resource for every state-changing operation", "Store audit logs in an append-only store separate from the application database", "Include IP address and session ID for correlation"],
+        "mitigation":       "Add an immutable audit log for every state-changing operation",
+    }))
+
+    # Input validation
+    if any(w in text for w in ["input", "form", "upload", "enter", "submit", "type", "search", "field"]):
+        threats.append(normalize_threat({
+            "threat":           "Insufficient input validation enabling injection",
+            "category":         "Input Validation",
+            "stride":           "Tampering",
+            "likelihood":       "Medium",
+            "impact":           "High",
+            "confidence":       78,
+            "why_flagged":      "The user story involves user-supplied input that flows into storage or processing — without strict validation, injection payloads can reach the backend.",
+            "attack_impact":    ["SQL or NoSQL injection leading to data exfiltration", "XSS payload stored and executed in other users' browsers", "Business logic bypass via malformed values"],
+            "mitigation_steps": ["Validate all inputs against a strict schema (type, length, format, allowlist)", "Use parameterized queries or an ORM that prevents SQL injection", "Encode outputs in the appropriate context (HTML, JSON, URL)"],
+            "mitigation":       "Validate and sanitize all user inputs before processing",
+        }))
+
+    # Workflow abuse
+    threats.append(normalize_threat({
+        "threat":           "Workflow abuse via missing rate limiting",
+        "category":         "Business Logic",
+        "stride":           "Denial of Service",
+        "likelihood":       "Medium",
+        "impact":           "Medium",
+        "confidence":       72,
+        "why_flagged":      "The described action can be repeated programmatically — without rate limiting it is vulnerable to abuse, enumeration, or resource exhaustion.",
+        "attack_impact":    ["Credential stuffing or enumeration attacks", "Resource exhaustion degrading service for all users", "Spam or fraudulent submissions at scale"],
+        "mitigation_steps": ["Apply per-user and per-IP rate limits on the endpoint backing this story", "Return 429 Too Many Requests with a Retry-After header", "Add CAPTCHA or proof-of-work for high-value actions (password reset, registration)"],
+        "mitigation":       "Enforce rate limiting on the endpoint for this action",
+    }))
+
+    return threats
 
 
 # =========================
@@ -243,7 +395,7 @@ mitigation_steps (array of strings), mitigation (string).
         )
 
         text = res.json().get("response", "")
-        print("🖥️ OLLAMA RAW:\n", text)
+        print("[OLLAMA RAW]:", text[:200])
 
         result = extract_json(text)
 
@@ -253,7 +405,7 @@ mitigation_steps (array of strings), mitigation (string).
         return result
 
     except Exception as e:
-        print("❌ OLLAMA ERROR:", e)
+        print("[OLLAMA ERROR]:", e)
         return None
 
 
@@ -363,24 +515,34 @@ def local_engine(system_description):
 def analyze_with_llm(system_description: str):
 
     print("\n==============================")
-    print("INPUT:", system_description)
+    print("INPUT:", system_description[:120])
 
-    # 1️⃣ GROQ
-    print("➡️ TRYING GROQ...")
+    # ── Route user stories to the shift-left reviewer ──
+    if is_user_story(system_description):
+        print("[LLM] Detected user story — running shift-left review")
+        result = call_groq_user_story(system_description)
+        if result:
+            print("[LLM] User story GROQ success")
+            return result
+        print("[LLM] User story GROQ failed — using rule-based fallback")
+        return _user_story_fallback(system_description)
+
+    # 1. GROQ
+    print("[LLM] Trying GROQ...")
     result = call_groq(system_description)
 
     if result:
-        print("✅ GROQ SUCCESS")
+        print("[LLM] GROQ success")
         return result
 
-    # 2️⃣ OLLAMA
-    print("➡️ TRYING OLLAMA...")
+    # 2. OLLAMA
+    print("[LLM] Trying OLLAMA...")
     result = call_ollama(system_description)
 
     if result:
-        print("✅ OLLAMA SUCCESS")
+        print("[LLM] OLLAMA success")
         return result
 
-    # 3️⃣ LOCAL FALLBACK
-    print("⚡ USING LOCAL ENGINE")
+    # 3. LOCAL FALLBACK
+    print("[LLM] Using local engine")
     return local_engine(system_description)

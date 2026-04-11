@@ -18,12 +18,12 @@ class SystemResponse(BaseModel):
         from_attributes = True
 
 
-# Request schema for analysis
+# Request schema for text analysis
 class AnalysisRequest(BaseModel):
     system_description: str
 
 
-# Response schema for threat analysis
+# Response schema for a single threat (text or file analysis)
 class AnalysisResponse(BaseModel):
     threat: str
     category: str
@@ -35,7 +35,21 @@ class AnalysisResponse(BaseModel):
     confidence: Optional[int] = None
     mitigation: str
 
-    # Enrichment fields — optional for backward compatibility
-    why_flagged:      Optional[str]       = None
-    attack_impact:    Optional[List[str]] = None
-    mitigation_steps: Optional[List[str]] = None
+    # Enrichment — added in v2
+    why_flagged:         Optional[str]       = None
+    attack_impact:       Optional[List[str]] = None
+    mitigation_steps:    Optional[List[str]] = None
+
+    # File analysis — added in v3 (absent for text-based analyses)
+    evidence:            Optional[str]  = None
+    mitigation_priority: Optional[str]  = None
+    source_filename:     Optional[str]  = None
+
+
+# Response schema for file upload endpoint
+class FileAnalysisResponse(BaseModel):
+    filename:    str
+    file_type:   str
+    hints_found: int
+    hints:       List[str]
+    analysis:    List[AnalysisResponse]

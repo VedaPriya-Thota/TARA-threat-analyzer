@@ -1,7 +1,14 @@
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
+from dotenv import load_dotenv
 
-DATABASE_URL = "your_db_url"
+load_dotenv()
+
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "mysql+pymysql://root:Sudha%402006@localhost:3306/tara_db"
+)
 
 engine = create_engine(DATABASE_URL)
 

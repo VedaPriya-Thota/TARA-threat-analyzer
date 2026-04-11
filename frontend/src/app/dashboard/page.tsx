@@ -19,6 +19,25 @@ const STEPS = [
   "Generating mitigation strategies...",
 ]
 
+const FILE_STEPS = [
+  "Reading file content...",
+  "Extracting security hints...",
+  "Mapping to STRIDE model...",
+  "Scoring vulnerabilities...",
+  "Building mitigation plan...",
+]
+
+const URL_STEPS = [
+  "Resolving target URL...",
+  "Fetching surface metadata...",
+  "Inspecting security headers...",
+  "Mapping attack surface...",
+  "Generating threat model...",
+]
+
+const ACCEPTED_EXTENSIONS = ".yaml,.yml,.json,.txt,.log"
+const MAX_FILE_MB = 0.5
+
 const SEVERITY_ORDER = ["critical", "high", "medium", "low"]
 
 const SEVERITY_META: Record<string, { color: string; bg: string; border: string; label: string }> = {
@@ -79,13 +98,159 @@ function MitigationCell({ text }: { text: string }) {
 }
 
 /* ─────────────────────────────────────────────────────────
+   FILE UPLOAD ZONE
+───────────────────────────────────────────────────────── */
+function FileUploadZone({
+  file, onFile, onClear, error,
+}: {
+  file: File | null
+  onFile: (f: File) => void
+  onClear: () => void
+  error: string
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [dragging, setDragging] = useState(false)
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault(); setDragging(false)
+    const f = e.dataTransfer.files[0]
+    if (f) onFile(f)
+  }
+
+  const EXT_LABELS = ["YAML", "JSON", "TXT", "LOG"]
+
+  return (
+    <div style={{ marginTop: 14 }}>
+      {/* Hidden native input */}
+      <input
+        ref={inputRef}
+        type="file"
+        accept={ACCEPTED_EXTENSIONS}
+        style={{ display: "none" }}
+        onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f) }}
+      />
+
+      {file ? (
+        /* ── File selected state ── */
+        <div style={{
+          display: "flex", alignItems: "center", gap: 12,
+          padding: "11px 14px", borderRadius: 10,
+          background: "rgba(34,197,94,.05)", border: "1px solid rgba(34,197,94,.25)",
+        }}>
+          {/* File icon */}
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+          <span style={{ flex: 1, fontSize: ".82rem", fontWeight: 600, color: "#86efac", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {file.name}
+          </span>
+          <span style={{ fontSize: ".72rem", color: "#334155", flexShrink: 0 }}>
+            {(file.size / 1024).toFixed(1)} KB
+          </span>
+          <button
+            onClick={onClear}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "#475569", padding: 2, lineHeight: 0 }}
+            title="Remove file"
+          >
+            <svg width="13" height="13" viewBox="0 0 10 10" fill="none">
+              <path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+            </svg>
+          </button>
+        </div>
+      ) : (
+        /* ── Drop zone ── */
+        <div
+          onDragOver={e => { e.preventDefault(); setDragging(true) }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={handleDrop}
+          onClick={() => inputRef.current?.click()}
+          style={{
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+            gap: 8, padding: "22px 16px", borderRadius: 10, cursor: "pointer",
+            border: `1.5px dashed ${dragging ? "rgba(56,189,248,.6)" : "rgba(56,189,248,.2)"}`,
+            background: dragging ? "rgba(56,189,248,.04)" : "rgba(2,6,18,.5)",
+            transition: "border-color .15s, background .15s",
+          }}
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={dragging ? "#38bdf8" : "#334155"} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ transition: "stroke .15s" }}>
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          <p style={{ margin: 0, fontSize: ".8rem", fontWeight: 600, color: dragging ? "#38bdf8" : "#475569" }}>
+            Drop file here or <span style={{ color: "#38bdf8", textDecoration: "underline" }}>browse</span>
+          </p>
+          <div style={{ display: "flex", gap: 5 }}>
+            {EXT_LABELS.map(ext => (
+              <span key={ext} style={{ fontSize: ".62rem", fontWeight: 700, color: "#1e3a52", background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.06)", borderRadius: 4, padding: "1px 6px" }}>
+                .{ext.toLowerCase()}
+              </span>
+            ))}
+          </div>
+          <p style={{ margin: 0, fontSize: ".67rem", color: "#1e3a52" }}>Max {MAX_FILE_MB * 1024} KB</p>
+        </div>
+      )}
+
+      {error && (
+        <p style={{ margin: "6px 0 0", fontSize: ".78rem", color: "#fca5a5", fontWeight: 600 }}>⚠ {error}</p>
+      )}
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────
+   HINTS BANNER  (shown after file analysis)
+───────────────────────────────────────────────────────── */
+function HintsBanner({ filename, fileType, hints }: { filename: string; fileType: string; hints: string[] }) {
+  const [open, setOpen] = useState(false)
+  if (!hints.length) return null
+  return (
+    <div style={{
+      borderRadius: 12, border: "1px solid rgba(245,158,11,.2)",
+      background: "rgba(245,158,11,.04)", padding: "10px 14px",
+      marginBottom: 14, animation: "fade-up .3s ease both",
+    }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{ width: "100%", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, padding: 0 }}
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        </svg>
+        <span style={{ fontSize: ".72rem", fontWeight: 700, color: "#f59e0b", textTransform: "uppercase", letterSpacing: ".07em" }}>
+          {hints.length} static hint{hints.length !== 1 ? "s" : ""} detected in {filename}
+        </span>
+        <span style={{ fontSize: ".67rem", color: "#334155", marginLeft: "auto" }}>{fileType}</span>
+        <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="#475569" strokeWidth="1.8" strokeLinecap="round"
+          style={{ flexShrink: 0, transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform .15s" }}>
+          <polyline points="2 4 6 8 10 4"/>
+        </svg>
+      </button>
+      {open && (
+        <ul style={{ margin: "10px 0 0", padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 4 }}>
+          {hints.map((h, i) => (
+            <li key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+              <span style={{ width: 4, height: 4, borderRadius: "50%", background: "#f59e0b", flexShrink: 0, marginTop: 6 }} />
+              <code style={{ fontSize: ".71rem", color: "#94a3b8", lineHeight: 1.5, wordBreak: "break-all", fontFamily: "ui-monospace, monospace" }}>{h}</code>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────
    EMPTY STATE  (shown before any analysis is run)
 ───────────────────────────────────────────────────────── */
-const EXAMPLE_SYSTEMS = [
-  "Banking API with JWT auth",
-  "IoT device firmware",
-  "Healthcare patient portal",
-  "Cloud microservices on AWS",
+const EXAMPLE_STORIES = [
+  "As a user, I want to reset my password via email link so that I can regain account access.",
+  "As an admin, I want to export all user data as CSV so that I can share reports with stakeholders.",
+  "As a customer, I want to upload a profile photo so that my account shows my identity.",
+  "As a seller, I want to update product prices in bulk so that I can respond to market changes quickly.",
+  "As a user, I want to log in with my Google account so that I don't have to remember a password.",
+  "As a manager, I want to delete any employee record so that I can keep the directory accurate.",
 ]
 
 function EmptyState({ onChipClick }: { onChipClick: (text: string) => void }) {
@@ -102,13 +267,15 @@ function EmptyState({ onChipClick }: { onChipClick: (text: string) => void }) {
           </div>
           <p className="es-headline">No analysis run yet</p>
           <p className="es-sub">
-            Enter a system description above and click <strong>Analyze System</strong> to detect threats, STRIDE classifications, and risk scores.
+            Enter a user story or system description and click <strong>Analyze</strong> to detect threats, STRIDE classifications, and risk scores.
           </p>
           <div className="es-examples">
-            <span className="es-examples-label">Try these systems:</span>
+            <span className="es-examples-label">Try these user stories:</span>
             <div className="es-chips">
-              {EXAMPLE_SYSTEMS.map(s => (
-                <button key={s} className="es-chip" onClick={() => onChipClick(s)}>{s}</button>
+              {EXAMPLE_STORIES.map(s => (
+                <button key={s} className="es-chip" onClick={() => onChipClick(s)} title={s}>
+                  {s.length > 52 ? s.slice(0, 50) + "…" : s}
+                </button>
               ))}
             </div>
           </div>
@@ -151,7 +318,8 @@ const THINKING_MSGS = [
   "Building mitigation plan…",
 ]
 
-function AnalysisLoader({ step }: { step: number }) {
+function AnalysisLoader({ step, fileMode = false, urlMode = false }: { step: number; fileMode?: boolean; urlMode?: boolean }) {
+  const steps = urlMode ? URL_STEPS : fileMode ? FILE_STEPS : STEPS
   const [thinkIdx, setThinkIdx] = useState(0)
 
   useEffect(() => {
@@ -172,8 +340,8 @@ function AnalysisLoader({ step }: { step: number }) {
 
       {/* Steps list */}
       <div className="loader-steps">
-        <p className="loader-title">AI Security Analysis</p>
-        {STEPS.map((text, i) => {
+        <p className="loader-title">{urlMode ? "URL Surface Mapping" : fileMode ? "File Threat Analysis" : "AI Security Analysis"}</p>
+        {steps.map((text, i) => {
           const state = i < step ? "done" : i === step ? "active" : "pending"
           return (
             <div key={i} className={`loader-step loader-step--${state}`}>
@@ -193,11 +361,11 @@ function AnalysisLoader({ step }: { step: number }) {
         <div className="loader-progress-track">
           <div
             className="loader-progress-fill"
-            style={{ width: `${Math.round((step / (STEPS.length - 1)) * 100)}%` }}
+            style={{ width: `${Math.round((step / (steps.length - 1)) * 100)}%` }}
           />
         </div>
         <span className="loader-progress-pct">
-          {Math.round((step / (STEPS.length - 1)) * 100)}%
+          {Math.round((step / (steps.length - 1)) * 100)}%
         </span>
         <span className="loader-thinking-msg">
           {THINKING_MSGS[thinkIdx]}
@@ -537,6 +705,9 @@ function ThreatDeepDive({ threats }: { threats: any[] }) {
           const attackImpact: string[]    = Array.isArray(r.attack_impact)    ? r.attack_impact    : []
           const mitigSteps:   string[]    = Array.isArray(r.mitigation_steps) ? r.mitigation_steps : []
           const whyText: string           = r.why_flagged || whyFlagged(r)
+          const evidenceText: string      = r.evidence || ""
+          const isFileThreat: boolean     = Boolean(r.source_filename)
+          const isUrlThreat: boolean      = Boolean(r.source_url)
 
           return (
             <div
@@ -612,10 +783,30 @@ function ThreatDeepDive({ threats }: { threats: any[] }) {
                         <span style={{ fontSize: ".62rem", fontWeight: 700, color: "#818cf8", textTransform: "uppercase", letterSpacing: ".07em" }}>
                           Why This Threat
                         </span>
+                        {isFileThreat && (
+                          <span style={{ marginLeft: "auto", fontSize: ".58rem", fontWeight: 700, color: "#f59e0b", background: "rgba(245,158,11,.1)", border: "1px solid rgba(245,158,11,.2)", borderRadius: 4, padding: "1px 5px" }}>
+                            FILE
+                          </span>
+                        )}
+                        {isUrlThreat && !isFileThreat && (
+                          <span style={{ marginLeft: "auto", fontSize: ".58rem", fontWeight: 700, color: "#a78bfa", background: "rgba(167,139,250,.1)", border: "1px solid rgba(167,139,250,.2)", borderRadius: 4, padding: "1px 5px" }}>
+                            URL
+                          </span>
+                        )}
                       </div>
                       <p style={{ margin: 0, fontSize: ".76rem", color: "#94a3b8", lineHeight: 1.6 }}>
                         {whyText}
                       </p>
+                      {evidenceText && (
+                        <div style={{ marginTop: 8, padding: "6px 10px", borderRadius: 7, background: "rgba(245,158,11,.06)", border: "1px solid rgba(245,158,11,.18)" }}>
+                          <span style={{ display: "block", fontSize: ".58rem", fontWeight: 700, color: "#f59e0b", textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 4 }}>
+                            Evidence
+                          </span>
+                          <code style={{ fontSize: ".7rem", color: "#fde68a", lineHeight: 1.5, wordBreak: "break-all", fontFamily: "ui-monospace, monospace" }}>
+                            {evidenceText}
+                          </code>
+                        </div>
+                      )}
                     </div>
 
                     {/* Attack impact */}
@@ -687,6 +878,179 @@ function ThreatDeepDive({ threats }: { threats: any[] }) {
 }
 
 /* ─────────────────────────────────────────────────────────
+   URL INPUT ZONE
+───────────────────────────────────────────────────────── */
+function URLInputZone({ value, onChange, error }: { value: string; onChange: (v: string) => void; error: string }) {
+  const isGitHub = /^https?:\/\/github\.com\//i.test(value.trim())
+  const isHTTP   = /^https?:\/\//i.test(value.trim())
+  const hasValue = value.trim().length > 0
+
+  return (
+    <div style={{ marginTop: 14 }}>
+      {/* Explainer pills */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+        {[
+          { icon: "🌐", label: "Public website", desc: "analyzed via HTTP metadata & security headers" },
+          { icon: "🐙", label: "GitHub repo", desc: "analyzed via repository file tree" },
+        ].map(({ icon, label, desc }) => (
+          <div key={label} style={{
+            display: "flex", alignItems: "center", gap: 6,
+            padding: "5px 10px", borderRadius: 8,
+            background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.06)",
+            fontSize: ".7rem", color: "#475569",
+          }}>
+            <span style={{ fontSize: ".82rem" }}>{icon}</span>
+            <span style={{ fontWeight: 700, color: "#64748b" }}>{label}</span>
+            <span>— {desc}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Input field */}
+      <div style={{ position: "relative" }}>
+        {/* Type indicator */}
+        <div style={{
+          position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)",
+          display: "flex", alignItems: "center", gap: 5, pointerEvents: "none",
+        }}>
+          {hasValue && isGitHub ? (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="#94a3b8" aria-label="GitHub">
+              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12"/>
+            </svg>
+          ) : hasValue && isHTTP ? (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round">
+              <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+            </svg>
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#334155" strokeWidth="2" strokeLinecap="round">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+            </svg>
+          )}
+        </div>
+
+        <input
+          type="url"
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder="https://example.com  or  https://github.com/owner/repo"
+          style={{
+            width: "100%", boxSizing: "border-box",
+            paddingLeft: 36, paddingRight: hasValue && (isGitHub || isHTTP) ? 80 : 14,
+            paddingTop: 11, paddingBottom: 11,
+            background: "rgba(2,6,18,.6)", border: "1px solid rgba(56,189,248,.18)",
+            borderRadius: 10, color: "#e2e8f0", fontSize: ".84rem",
+            outline: "none", fontFamily: "ui-monospace, monospace",
+            transition: "border-color .15s",
+          }}
+          onFocus={e => { e.target.style.borderColor = "rgba(56,189,248,.45)" }}
+          onBlur={e => { e.target.style.borderColor = "rgba(56,189,248,.18)" }}
+        />
+
+        {/* Type badge */}
+        {hasValue && (isGitHub || isHTTP) && (
+          <span style={{
+            position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
+            fontSize: ".62rem", fontWeight: 700,
+            color: isGitHub ? "#a78bfa" : "#38bdf8",
+            background: isGitHub ? "rgba(167,139,250,.1)" : "rgba(56,189,248,.1)",
+            border: `1px solid ${isGitHub ? "rgba(167,139,250,.25)" : "rgba(56,189,248,.25)"}`,
+            borderRadius: 5, padding: "2px 7px", pointerEvents: "none",
+          }}>
+            {isGitHub ? "GitHub" : "Website"}
+          </span>
+        )}
+      </div>
+
+      {error && (
+        <p style={{ margin: "6px 0 0", fontSize: ".78rem", color: "#fca5a5", fontWeight: 600 }}>⚠ {error}</p>
+      )}
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────
+   SURFACE INFO BANNER  (shown after URL analysis)
+───────────────────────────────────────────────────────── */
+function SurfaceInfoBanner({ urlType, surfaceInfo }: { urlType: string; surfaceInfo: any }) {
+  const [open, setOpen] = useState(false)
+  if (!surfaceInfo || Object.keys(surfaceInfo).length === 0) return null
+
+  const isGitHub = urlType === "github"
+
+  const items: { label: string; value: string }[] = isGitHub ? [
+    { label: "Repository", value: `${surfaceInfo.owner}/${surfaceInfo.repo}` },
+    { label: "Total files", value: String(surfaceInfo.total_files ?? "—") },
+    { label: "Notable paths", value: surfaceInfo.notable_paths?.length ? `${surfaceInfo.notable_paths.length} detected` : "none" },
+  ] : [
+    { label: "Final URL", value: surfaceInfo.final_url ?? "—" },
+    { label: "Status", value: String(surfaceInfo.status_code ?? "—") },
+    { label: "Server", value: surfaceInfo.server ?? "not disclosed" },
+    { label: "X-Powered-By", value: surfaceInfo.x_powered_by ?? "not disclosed" },
+    { label: "Missing headers", value: surfaceInfo.missing_security_headers?.length ? surfaceInfo.missing_security_headers.join(", ") : "none" },
+    { label: "Stack signals", value: surfaceInfo.stack_signals?.length ? surfaceInfo.stack_signals.join(", ") : "none" },
+  ]
+
+  const accentColor = isGitHub ? "#a78bfa" : "#38bdf8"
+  const accentBg    = isGitHub ? "rgba(167,139,250,.04)" : "rgba(56,189,248,.04)"
+  const accentBorder = isGitHub ? "rgba(167,139,250,.2)" : "rgba(56,189,248,.2)"
+
+  return (
+    <div style={{
+      borderRadius: 12, border: `1px solid ${accentBorder}`,
+      background: accentBg, padding: "10px 14px",
+      marginBottom: 14, animation: "fade-up .3s ease both",
+    }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{ width: "100%", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, padding: 0 }}
+      >
+        {isGitHub ? (
+          <svg width="13" height="13" viewBox="0 0 24 24" fill={accentColor} aria-label="GitHub">
+            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12"/>
+          </svg>
+        ) : (
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={accentColor} strokeWidth="2" strokeLinecap="round">
+            <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+          </svg>
+        )}
+        <span style={{ fontSize: ".72rem", fontWeight: 700, color: accentColor, textTransform: "uppercase", letterSpacing: ".07em" }}>
+          Surface scan — {isGitHub ? "GitHub repository" : "website metadata"}
+        </span>
+        <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="#475569" strokeWidth="1.8" strokeLinecap="round"
+          style={{ flexShrink: 0, marginLeft: "auto", transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform .15s" }}>
+          <polyline points="2 4 6 8 10 4"/>
+        </svg>
+      </button>
+
+      {open && (
+        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 5 }}>
+          {items.map(({ label, value }) => (
+            <div key={label} style={{ display: "flex", gap: 10, alignItems: "baseline" }}>
+              <span style={{ fontSize: ".67rem", fontWeight: 700, color: "#334155", minWidth: 110, flexShrink: 0 }}>{label}</span>
+              <span style={{ fontSize: ".71rem", color: "#64748b", wordBreak: "break-all", fontFamily: "ui-monospace, monospace" }}>{value}</span>
+            </div>
+          ))}
+          {isGitHub && surfaceInfo.notable_paths?.length > 0 && (
+            <div style={{ marginTop: 6 }}>
+              <span style={{ fontSize: ".67rem", fontWeight: 700, color: "#334155" }}>Notable paths</span>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
+                {surfaceInfo.notable_paths.slice(0, 15).map((p: string) => (
+                  <code key={p} style={{
+                    fontSize: ".62rem", color: "#a78bfa", background: "rgba(167,139,250,.06)",
+                    border: "1px solid rgba(167,139,250,.15)", borderRadius: 4, padding: "1px 6px",
+                    fontFamily: "ui-monospace, monospace",
+                  }}>{p}</code>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────
    MAIN PAGE
 ───────────────────────────────────────────────────────── */
 export default function Dashboard() {
@@ -697,22 +1061,110 @@ export default function Dashboard() {
   const [step, setStep]               = useState(0)
   const stepRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const analyzeSystem = async () => {
+  // ── File upload state ──
+  const [analysisMode, setAnalysisMode]   = useState<"text" | "file" | "url">("text")
+  const [uploadedFile, setUploadedFile]   = useState<File | null>(null)
+  const [fileError, setFileError]         = useState("")
+  const [fileHints, setFileHints]         = useState<string[]>([])
+  const [fileType, setFileType]           = useState("")
+  const [fileName, setFileName]           = useState("")
+
+  // ── URL surface mapper state ──
+  const [urlInput, setUrlInput]           = useState("")
+  const [urlError, setUrlError]           = useState("")
+  const [surfaceInfo, setSurfaceInfo]     = useState<any>(null)
+  const [urlType, setUrlType]             = useState("")
+
+  const handleFileSelect = (f: File) => {
+    const ext = "." + f.name.split(".").pop()!.toLowerCase()
+    const allowed = [".yaml", ".yml", ".json", ".txt", ".log"]
+    if (!allowed.includes(ext)) { setFileError(`Unsupported type: ${ext}`); return }
+    if (f.size > MAX_FILE_MB * 1024 * 1024) { setFileError(`File too large (max ${MAX_FILE_MB * 1024} KB)`); return }
+    setFileError(""); setUploadedFile(f)
+  }
+
+  const clearFile = () => { setUploadedFile(null); setFileError("") }
+
+  const switchMode = (m: "text" | "file" | "url") => {
+    setAnalysisMode(m); setError(""); setFileError(""); setUrlError("")
+  }
+
+  // ── Text analysis ──
+  const analyzeText = async () => {
     if (!description.trim()) { setError("Please enter a system description."); return }
     setError(""); setLoading(true); setStep(0)
     stepRef.current = setInterval(
       () => setStep(s => Math.min(s + 1, STEPS.length - 1)),
-      Math.floor(700 + Math.random() * 400),  // slight variance feels more natural
+      Math.floor(700 + Math.random() * 400),
     )
     try {
       const res = await axios.post("http://localhost:8000/analysis/", { system_description: description })
       setResults(res.data.analysis ?? [])
+      setFileHints([]); setFileType(""); setFileName("")
     } catch {
       setError("Failed to connect to backend. Ensure backend is running on :8000.")
     } finally {
       if (stepRef.current) clearInterval(stepRef.current)
       setLoading(false); setStep(0)
     }
+  }
+
+  // ── File analysis ──
+  const analyzeFile = async () => {
+    if (!uploadedFile) { setFileError("Please select a file first."); return }
+    setFileError(""); setError(""); setLoading(true); setStep(0)
+    stepRef.current = setInterval(
+      () => setStep(s => Math.min(s + 1, FILE_STEPS.length - 1)),
+      Math.floor(600 + Math.random() * 400),
+    )
+    try {
+      const form = new FormData()
+      form.append("file", uploadedFile)
+      const res = await axios.post("http://localhost:8000/analysis/upload", form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      })
+      setResults(res.data.analysis ?? [])
+      setFileHints(res.data.hints ?? [])
+      setFileType(res.data.file_type ?? "")
+      setFileName(res.data.filename ?? uploadedFile.name)
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || "File analysis failed. Check backend."
+      setFileError(msg)
+    } finally {
+      if (stepRef.current) clearInterval(stepRef.current)
+      setLoading(false); setStep(0)
+    }
+  }
+
+  // ── URL analysis ──
+  const analyzeURL = async () => {
+    const url = urlInput.trim()
+    if (!url) { setUrlError("Please enter a URL."); return }
+    if (!/^https?:\/\//i.test(url)) { setUrlError("URL must start with http:// or https://"); return }
+    setUrlError(""); setError(""); setLoading(true); setStep(0)
+    stepRef.current = setInterval(
+      () => setStep(s => Math.min(s + 1, URL_STEPS.length - 1)),
+      Math.floor(700 + Math.random() * 500),
+    )
+    try {
+      const res = await axios.post("http://localhost:8000/analysis/url", { url })
+      setResults(res.data.analysis ?? [])
+      setSurfaceInfo(res.data.surface_info ?? null)
+      setUrlType(res.data.url_type ?? "")
+      setFileHints([]); setFileType(""); setFileName("")
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || "URL analysis failed. Check backend."
+      setUrlError(msg)
+    } finally {
+      if (stepRef.current) clearInterval(stepRef.current)
+      setLoading(false); setStep(0)
+    }
+  }
+
+  const runAnalysis = () => {
+    if (analysisMode === "file") return analyzeFile()
+    if (analysisMode === "url")  return analyzeURL()
+    return analyzeText()
   }
 
   const exportPDF = async () => {
@@ -748,7 +1200,7 @@ export default function Dashboard() {
         <div className="dashboard-header">
           <div>
             <h1>TARA Threat Dashboard</h1>
-            <p>Describe your architecture and run AI-powered threat analysis.</p>
+            <p>User story review, system architecture analysis, file scanning, or URL surface mapping.</p>
           </div>
           <div className={`status-pill${loading ? " status-busy" : results.length ? " status-done" : ""}`}>
             {loading ? "Analyzing…" : results.length ? `${results.length} threats found` : "Ready"}
@@ -757,20 +1209,141 @@ export default function Dashboard() {
 
         {/* ── Analysis input ── */}
         <section className="analysis-panel">
-          <div className="panel-head">
-            <h2>System Threat Analysis</h2>
-            <p className="muted-text">Describe your architecture — API, database, auth layer, cloud services, etc.</p>
+          {/* Mode tabs */}
+          <div style={{ display: "flex", gap: 4, marginBottom: 14, flexWrap: "wrap" }}>
+            {([
+              { id: "text", label: "Text Description", icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>, badge: null },
+              { id: "file", label: "Upload File",       icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>, badge: null },
+              { id: "url",  label: "Surface Mapper",    icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>, badge: "NEW" },
+            ] as const).map(({ id, label, icon, badge }) => (
+              <button
+                key={id}
+                onClick={() => switchMode(id)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  padding: "6px 14px", borderRadius: 8, border: "1px solid",
+                  fontSize: ".78rem", fontWeight: 700, cursor: "pointer",
+                  background: analysisMode === id ? "rgba(56,189,248,.1)" : "transparent",
+                  borderColor: analysisMode === id ? "rgba(56,189,248,.35)" : "rgba(255,255,255,.07)",
+                  color: analysisMode === id ? "#38bdf8" : "#475569",
+                  transition: "all .15s",
+                }}
+              >
+                {icon}
+                {label}
+                {badge && (
+                  <span style={{ fontSize: ".58rem", fontWeight: 800, color: "#f59e0b", background: "rgba(245,158,11,.12)", border: "1px solid rgba(245,158,11,.25)", borderRadius: 3, padding: "0 4px" }}>
+                    {badge}
+                  </span>
+                )}
+              </button>
+            ))}
           </div>
-          <textarea
-            value={description}
-            onChange={e => setDescription(e.target.value)}
-            className="analysis-textarea"
-            placeholder="e.g. A REST API with JWT auth, MySQL database and Redis cache deployed on AWS..."
-            rows={4}
-          />
+
+          {/* Text mode — User Story / Functional Requirement */}
+          {analysisMode === "text" && (
+            <>
+              <div className="panel-head">
+                <h2>User Story / Functional Requirement</h2>
+                <p className="muted-text">Describe a user story, feature, or system for shift-left security review.</p>
+              </div>
+
+              {/* Template hint */}
+              <div style={{
+                display: "flex", alignItems: "flex-start", gap: 8,
+                padding: "8px 12px", borderRadius: 8, marginBottom: 10,
+                background: "rgba(56,189,248,.04)", border: "1px solid rgba(56,189,248,.12)",
+              }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 2 }}>
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <div>
+                  <p style={{ margin: 0, fontSize: ".72rem", color: "#38bdf8", fontWeight: 700, marginBottom: 3 }}>
+                    Suggested format — user story
+                  </p>
+                  <p style={{ margin: 0, fontSize: ".72rem", color: "#334155", lineHeight: 1.55, fontFamily: "ui-monospace, monospace" }}>
+                    As a [user role], I want to [action] using [technology/workflow] so that [goal].
+                  </p>
+                  <p style={{ margin: "4px 0 0", fontSize: ".68rem", color: "#1e3a52" }}>
+                    Or describe any system, API, or workflow — both formats work.
+                  </p>
+                </div>
+              </div>
+
+              <textarea
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                className="analysis-textarea"
+                placeholder={"As a registered user, I want to reset my password via email link so that I can regain access to my account.\n\nOr: A REST API with JWT auth, MySQL database and Redis cache deployed on AWS..."}
+                rows={4}
+              />
+
+              {/* Quick-fill chips */}
+              {!description.trim() && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 8 }}>
+                  <span style={{ fontSize: ".67rem", color: "#334155", alignSelf: "center", flexShrink: 0 }}>Try:</span>
+                  {EXAMPLE_STORIES.slice(0, 3).map(s => (
+                    <button
+                      key={s}
+                      onClick={() => setDescription(s)}
+                      style={{
+                        fontSize: ".67rem", color: "#475569", background: "rgba(255,255,255,.03)",
+                        border: "1px solid rgba(255,255,255,.07)", borderRadius: 6,
+                        padding: "3px 9px", cursor: "pointer", transition: "all .12s",
+                        maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                      }}
+                      title={s}
+                    >
+                      {s.length > 50 ? s.slice(0, 48) + "…" : s}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* File mode */}
+          {analysisMode === "file" && (
+            <>
+              <div className="panel-head">
+                <h2>File Threat Analysis</h2>
+                <p className="muted-text">Upload a config or log file — YAML, JSON, TXT, or LOG.</p>
+              </div>
+              <FileUploadZone
+                file={uploadedFile}
+                onFile={handleFileSelect}
+                onClear={clearFile}
+                error={fileError}
+              />
+            </>
+          )}
+
+          {/* URL Surface Mapper mode */}
+          {analysisMode === "url" && (
+            <>
+              <div className="panel-head">
+                <h2>URL Surface Mapper</h2>
+                <p className="muted-text">Enter a public website or GitHub repo URL for passive surface analysis.</p>
+              </div>
+              <URLInputZone value={urlInput} onChange={setUrlInput} error={urlError} />
+            </>
+          )}
+
           <div className="analysis-actions">
-            <button onClick={analyzeSystem} disabled={loading} className="action-btn analyze-btn">
-              {loading ? "Analyzing…" : "⚡ Analyze System"}
+            <button
+              onClick={runAnalysis}
+              disabled={loading || (analysisMode === "file" && !uploadedFile) || (analysisMode === "url" && !urlInput.trim())}
+              className="action-btn analyze-btn"
+            >
+              {loading
+                ? "Analyzing…"
+                : analysisMode === "file"
+                  ? "⚡ Analyze File"
+                  : analysisMode === "url"
+                    ? "⚡ Map Surface"
+                    : description.trim().match(/^as\s+a\s+/i)
+                      ? "⚡ Review Story"
+                      : "⚡ Analyze System"}
             </button>
             <button onClick={exportPDF} disabled={!results.length} className="action-btn export-btn">
               📄 Export PDF
@@ -780,7 +1353,17 @@ export default function Dashboard() {
         </section>
 
         {/* ── Loading animation ── */}
-        {loading && <AnalysisLoader step={step} />}
+        {loading && <AnalysisLoader step={step} fileMode={analysisMode === "file"} urlMode={analysisMode === "url"} />}
+
+        {/* ── Hints banner (file analysis only) ── */}
+        {!loading && fileHints.length > 0 && (
+          <HintsBanner filename={fileName} fileType={fileType} hints={fileHints} />
+        )}
+
+        {/* ── Surface info banner (URL analysis only) ── */}
+        {!loading && surfaceInfo && urlType && (
+          <SurfaceInfoBanner urlType={urlType} surfaceInfo={surfaceInfo} />
+        )}
 
         {/* ── Results or empty state ── */}
         {!loading && results.length > 0 && (
@@ -793,7 +1376,7 @@ export default function Dashboard() {
 
         {!loading && (
           results.length === 0
-            ? <EmptyState onChipClick={setDescription} />
+            ? <EmptyState onChipClick={(text) => { switchMode("text"); setDescription(text) }} />
             : (
               <>
               <div className="result-grid">

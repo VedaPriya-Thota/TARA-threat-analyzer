@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-DATABASE_URL = "mysql+pymysql://root:Uhd%400285@localhost/tara_db"
+DATABASE_URL = "YOUR_DATABASE_URL_HERE"
 
 engine = create_engine(DATABASE_URL)
 

@@ -1,0 +1,47 @@
+# ----------------------
+# ENV FILES (IMPORTANT)
+# ----------------------
+.env
+backend/.env
+
+# ----------------------
+# NODE (FRONTEND)
+# ----------------------
+node_modules/
+frontend/node_modules/
+.next/
+frontend/.next/
+dist/
+build/
+
+# ----------------------
+# PYTHON (BACKEND)
+# ----------------------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+.env/
+
+# ----------------------
+# LOGS
+# ----------------------
+*.log
+
+# ----------------------
+# OS FILES
+# ----------------------
+.DS_Store
+Thumbs.db
+
+# ----------------------
+# IDE FILES
+# ----------------------
+.vscode/
+.idea/
+
+# ----------------------
+# DATABASE (if any)
+# ----------------------
+*.db

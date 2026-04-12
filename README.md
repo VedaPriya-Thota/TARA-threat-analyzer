@@ -19,7 +19,6 @@
 11. [Application Pages](#application-pages)
 12. [LLM Prompt Design](#llm-prompt-design)
 13. [Fallback Chain](#fallback-chain)
-14. [Future Enhancements](#future-enhancements)
 
 ---
 

@@ -1279,240 +1279,189 @@ function Dashboard() {
   const exportPDF = () => {
     if (!results.length) return
 
-    const pdf   = new jsPDF("p", "mm", "a4")
-    const PW    = 210   // A4 width mm
-    const PH    = 297   // A4 height mm
-    const ML    = 14    // margin left
-    const MR    = 14    // margin right
-    const MT    = 16    // margin top
-    const MB    = 16    // margin bottom
-    const CW    = PW - ML - MR   // content width
-    let   y     = MT
+    const pdf  = new jsPDF("p", "mm", "a4")
+    const PW   = 210
+    const PH   = 297
+    const ML   = 14
+    const MR   = 14
+    const MT   = 16
+    const MB   = 16
+    const CW   = PW - ML - MR
+    let   y    = MT
 
-    // ── helpers ──────────────────────────────────────────────
+    // ── helpers ──────────────────────────────────────────
     const checkPage = (needed = 8) => {
       if (y + needed > PH - MB) { pdf.addPage(); y = MT }
     }
 
     const heading = (text: string, size = 13, color: [number,number,number] = [30,30,30]) => {
       checkPage(10)
-      pdf.setFontSize(size)
-      pdf.setTextColor(...color)
-      pdf.setFont("helvetica", "bold")
-      pdf.text(text, ML, y)
-      y += size * 0.45
+      pdf.setFontSize(size); pdf.setTextColor(...color); pdf.setFont("helvetica","bold")
+      pdf.text(text, ML, y); y += size * 0.45
     }
 
     const subheading = (text: string) => {
       checkPage(8)
-      pdf.setFontSize(9)
-      pdf.setTextColor(80, 80, 80)
-      pdf.setFont("helvetica", "bold")
-      pdf.text(text, ML, y)
-      y += 5
+      pdf.setFontSize(9); pdf.setTextColor(80,80,80); pdf.setFont("helvetica","bold")
+      pdf.text(text, ML, y); y += 5
     }
 
     const body = (text: string, indent = 0, color: [number,number,number] = [50,50,50]) => {
-      pdf.setFontSize(8.5)
-      pdf.setTextColor(...color)
-      pdf.setFont("helvetica", "normal")
+      pdf.setFontSize(8.5); pdf.setTextColor(...color); pdf.setFont("helvetica","normal")
       const lines = pdf.splitTextToSize(text, CW - indent)
-      lines.forEach((line: string) => {
-        checkPage(5)
-        pdf.text(line, ML + indent, y)
-        y += 4.5
-      })
+      lines.forEach((line: string) => { checkPage(5); pdf.text(line, ML + indent, y); y += 4.5 })
     }
 
     const pill = (text: string, x: number, yPos: number, bg: [number,number,number], fg: [number,number,number]) => {
-      pdf.setFillColor(...bg)
-      pdf.setTextColor(...fg)
-      pdf.setFontSize(7)
-      pdf.setFont("helvetica", "bold")
+      pdf.setFillColor(...bg); pdf.setTextColor(...fg); pdf.setFontSize(7); pdf.setFont("helvetica","bold")
       const w = pdf.getTextWidth(text) + 4
-      pdf.roundedRect(x, yPos - 3.5, w, 5, 1, 1, "F")
-      pdf.text(text, x + 2, yPos)
+      pdf.roundedRect(x, yPos - 3.5, w, 5, 1, 1, "F"); pdf.text(text, x + 2, yPos)
       return w + 2
     }
 
     const divider = (color: [number,number,number] = [220,220,220]) => {
-      checkPage(4)
-      pdf.setDrawColor(...color)
-      pdf.setLineWidth(0.3)
-      pdf.line(ML, y, ML + CW, y)
-      y += 4
+      checkPage(4); pdf.setDrawColor(...color); pdf.setLineWidth(0.3)
+      pdf.line(ML, y, ML + CW, y); y += 4
     }
 
-    const riskColors: Record<string, { bg: [number,number,number]; fg: [number,number,number] }> = {
-      critical: { bg: [239,68,68],  fg: [255,255,255] },
-      high:     { bg: [249,115,22], fg: [255,255,255] },
-      medium:   { bg: [245,158,11], fg: [255,255,255] },
-      low:      { bg: [56,189,248], fg: [255,255,255] },
+    const riskColors: Record<string, { bg:[number,number,number]; fg:[number,number,number] }> = {
+      critical: { bg:[239,68,68],  fg:[255,255,255] },
+      high:     { bg:[249,115,22], fg:[255,255,255] },
+      medium:   { bg:[245,158,11], fg:[255,255,255] },
+      low:      { bg:[56,189,248], fg:[255,255,255] },
     }
 
-    // ── PAGE 1 — COVER ────────────────────────────────────────
-    // Dark header bar
-    pdf.setFillColor(8, 15, 32)
-    pdf.rect(0, 0, PW, 48, "F")
-
-    pdf.setTextColor(255, 255, 255)
-    pdf.setFont("helvetica", "bold")
-    pdf.setFontSize(22)
+    // ── PAGE 1 — COVER ───────────────────────────────────
+    pdf.setFillColor(8,15,32); pdf.rect(0, 0, PW, 48, "F")
+    pdf.setTextColor(255,255,255); pdf.setFont("helvetica","bold"); pdf.setFontSize(22)
     pdf.text("TARA Threat Analysis Report", ML, 22)
-
-    pdf.setFontSize(9)
-    pdf.setFont("helvetica", "normal")
-    pdf.setTextColor(148, 163, 184)
+    pdf.setFontSize(9); pdf.setFont("helvetica","normal"); pdf.setTextColor(148,163,184)
     pdf.text("AI-Powered Security Assessment  ·  STRIDE Framework", ML, 30)
     pdf.text(`Generated: ${new Date().toLocaleString()}`, ML, 36)
 
     y = 58
 
-    // ── Summary stats row ────────────────────────────────────
-    const sevCounts = { critical: 0, high: 0, medium: 0, low: 0 }
-    results.forEach(r => {
-      const l = r.risk_level?.toLowerCase()
-      if (l in sevCounts) (sevCounts as any)[l]++
-    })
+    // ── Summary stats row ────────────────────────────────
+    const sevCounts = { critical:0, high:0, medium:0, low:0 }
+    results.forEach(r => { const l = r.risk_level?.toLowerCase(); if (l in sevCounts) (sevCounts as any)[l]++ })
 
     const statBoxes = [
-      { label: "Total Threats", value: String(results.length),  bg: [15,23,42]  as [number,number,number] },
-      { label: "Critical",      value: String(sevCounts.critical), bg: [127,29,29]  as [number,number,number] },
-      { label: "High",          value: String(sevCounts.high),     bg: [124,45,18]  as [number,number,number] },
-      { label: "Medium",        value: String(sevCounts.medium),   bg: [113,63,18]  as [number,number,number] },
-      { label: "Low",           value: String(sevCounts.low),      bg: [12,58,92]   as [number,number,number] },
+      { label:"Total Threats", value:String(results.length),     bg:[15,23,42]   as [number,number,number] },
+      { label:"Critical",      value:String(sevCounts.critical), bg:[127,29,29]  as [number,number,number] },
+      { label:"High",          value:String(sevCounts.high),     bg:[124,45,18]  as [number,number,number] },
+      { label:"Medium",        value:String(sevCounts.medium),   bg:[113,63,18]  as [number,number,number] },
+      { label:"Low",           value:String(sevCounts.low),      bg:[12,58,92]   as [number,number,number] },
     ]
     const boxW = CW / statBoxes.length - 2
     statBoxes.forEach((b, i) => {
       const bx = ML + i * (boxW + 2)
-      pdf.setFillColor(...b.bg)
-      pdf.roundedRect(bx, y, boxW, 18, 2, 2, "F")
-      pdf.setTextColor(255, 255, 255)
-      pdf.setFont("helvetica", "bold")
-      pdf.setFontSize(14)
-      pdf.text(b.value, bx + boxW / 2, y + 9, { align: "center" })
-      pdf.setFontSize(6.5)
-      pdf.setFont("helvetica", "normal")
-      pdf.setTextColor(180, 200, 220)
-      pdf.text(b.label.toUpperCase(), bx + boxW / 2, y + 14.5, { align: "center" })
+      pdf.setFillColor(...b.bg); pdf.roundedRect(bx, y, boxW, 18, 2, 2, "F")
+      pdf.setTextColor(255,255,255); pdf.setFont("helvetica","bold"); pdf.setFontSize(14)
+      pdf.text(b.value, bx + boxW/2, y + 9, { align:"center" })
+      pdf.setFontSize(6.5); pdf.setFont("helvetica","normal"); pdf.setTextColor(180,200,220)
+      pdf.text(b.label.toUpperCase(), bx + boxW/2, y + 14.5, { align:"center" })
     })
     y += 26
 
     // Avg score + top STRIDE
     const avgScore = (results.reduce((s, r) => s + (r.risk_score ?? 0), 0) / results.length).toFixed(1)
-    const strideCounts: Record<string, number> = {}
+    const strideCounts: Record<string,number> = {}
     results.forEach(r => { if (r.stride) strideCounts[r.stride] = (strideCounts[r.stride] ?? 0) + 1 })
-    const topStride = Object.entries(strideCounts).sort((a, b) => b[1] - a[1])[0]
+    const topStride = Object.entries(strideCounts).sort((a,b) => b[1]-a[1])[0]
 
-    pdf.setFontSize(8.5)
-    pdf.setFont("helvetica", "normal")
-    pdf.setTextColor(80, 80, 80)
+    pdf.setFontSize(8.5); pdf.setFont("helvetica","normal"); pdf.setTextColor(80,80,80)
     pdf.text(`Average Risk Score: ${avgScore}`, ML, y)
-    if (topStride) pdf.text(`Dominant STRIDE Category: ${topStride[0]} (${topStride[1]} threats)`, ML + 70, y)
-    y += 8
+    if (topStride) pdf.text(`Dominant STRIDE: ${topStride[0]} (${topStride[1]} threats)`, ML + 80, y)
+    y += 8; divider()
 
-    divider()
+    // ── ALL THREATS ──────────────────────────────────────
+    heading("Threat Analysis", 14, [8,15,32]); y += 2
 
-    // ── PAGE CONTENT — ALL THREATS ───────────────────────────
-    heading("Threat Analysis", 14, [8, 15, 32])
-    y += 2
-
-    const sorted = [...results].sort((a, b) => (b.risk_score ?? 0) - (a.risk_score ?? 0))
+    const sorted = [...results].sort((a,b) => (b.risk_score ?? 0) - (a.risk_score ?? 0))
 
     sorted.forEach((r, i) => {
       const level = r.risk_level?.toLowerCase() ?? "low"
       const rc    = riskColors[level] ?? riskColors.low
+      checkPage(32)
 
-      checkPage(30)
+      // Shaded name band
+      pdf.setFillColor(245,247,250); pdf.rect(ML, y - 1, CW, 9, "F")
+      pdf.setFontSize(7); pdf.setFont("helvetica","bold"); pdf.setTextColor(100,116,139)
+      pdf.text(`#${i+1}`, ML+1, y+4.5)
+      pdf.setFontSize(9); pdf.setTextColor(15,23,42)
+      const nameLines = pdf.splitTextToSize(r.threat ?? "Unknown threat", CW - 32)
+      pdf.text(nameLines[0], ML+8, y+4.5)
 
-      // Threat number + name band
-      pdf.setFillColor(245, 247, 250)
-      pdf.rect(ML, y - 1, CW, 9, "F")
-
-      pdf.setFontSize(7)
-      pdf.setFont("helvetica", "bold")
-      pdf.setTextColor(100, 116, 139)
-      pdf.text(`#${i + 1}`, ML + 1, y + 4.5)
-
-      pdf.setFontSize(9)
-      pdf.setTextColor(15, 23, 42)
-      const nameLines = pdf.splitTextToSize(r.threat ?? "Unknown threat", CW - 30)
-      pdf.text(nameLines[0], ML + 8, y + 4.5)
-
-      // Risk + STRIDE pills on the right
+      // Risk + STRIDE pills right-aligned
       let px = ML + CW
       if (r.stride) {
-        const sw = pdf.getTextWidth(r.stride) + 6
-        px -= sw
-        pdf.setFillColor(241, 245, 249)
-        pdf.setTextColor(71, 85, 105)
-        pdf.setFontSize(6.5)
-        pdf.roundedRect(px, y + 1, sw - 1, 4.5, 1, 1, "F")
-        pdf.text(r.stride, px + 2, y + 4.5)
-        px -= 2
+        const sw = pdf.getTextWidth(r.stride) + 6; px -= sw
+        pdf.setFillColor(241,245,249); pdf.setTextColor(71,85,105); pdf.setFontSize(6.5)
+        pdf.roundedRect(px, y+1, sw-1, 4.5, 1, 1, "F"); pdf.text(r.stride, px+2, y+4.5); px -= 2
       }
       const rlabel = (r.risk_level ?? "Low").charAt(0).toUpperCase() + (r.risk_level ?? "low").slice(1).toLowerCase()
-      const rw = pdf.getTextWidth(rlabel) + 5
-      px -= rw
-      pdf.setFillColor(...rc.bg)
-      pdf.setTextColor(...rc.fg)
-      pdf.setFontSize(6.5)
-      pdf.roundedRect(px, y + 1, rw - 1, 4.5, 1, 1, "F")
-      pdf.text(rlabel, px + 2, y + 4.5)
-
+      const rw = pdf.getTextWidth(rlabel)+5; px -= rw
+      pdf.setFillColor(...rc.bg); pdf.setTextColor(...rc.fg); pdf.setFontSize(6.5)
+      pdf.roundedRect(px, y+1, rw-1, 4.5, 1, 1, "F"); pdf.text(rlabel, px+2, y+4.5)
       y += 11
 
-      // Details grid: score / category / confidence
+      // Score / Category / Confidence row
       const cols = [
         `Score: ${r.risk_score ?? "—"}`,
         `Category: ${r.category || r.stride || "—"}`,
         `Confidence: ${r.confidence != null ? r.confidence + "%" : "—"}`,
       ]
-      pdf.setFontSize(7.5)
-      pdf.setFont("helvetica", "normal")
-      pdf.setTextColor(100, 116, 139)
-      cols.forEach((c, ci) => pdf.text(c, ML + ci * (CW / 3), y))
-      y += 5.5
+      pdf.setFontSize(7.5); pdf.setFont("helvetica","normal"); pdf.setTextColor(100,116,139)
+      cols.forEach((c, ci) => pdf.text(c, ML + ci*(CW/3), y)); y += 5.5
 
       // Why flagged
       if (r.why_flagged || r.evidence) {
-        pdf.setFontSize(7.5)
-        pdf.setFont("helvetica", "bolditalic")
-        pdf.setTextColor(100, 116, 139)
-        pdf.text("Why flagged:", ML, y)
-        y += 4
-        body(r.why_flagged || r.evidence || "", 3, [80, 80, 80])
+        checkPage(10)
+        pdf.setFontSize(7.5); pdf.setFont("helvetica","bolditalic"); pdf.setTextColor(100,116,139)
+        pdf.text("Why flagged:", ML, y); y += 4
+        body(r.why_flagged || r.evidence || "", 3, [80,80,80])
       }
 
-      // Mitigation
-      const mitigText: string = Array.isArray(r.mitigation_steps) && r.mitigation_steps.length
-        ? r.mitigation_steps.map((s: string, j: number) => `${j + 1}. ${s}`).join("  ")
-        : r.mitigation ?? ""
-      if (mitigText) {
+      // Attack impact
+      const impacts: string[] = Array.isArray(r.attack_impact) ? r.attack_impact : []
+      if (impacts.length) {
         checkPage(8)
-        pdf.setFontSize(7.5)
-        pdf.setFont("helvetica", "bolditalic")
-        pdf.setTextColor(34, 197, 94)
-        pdf.text("Mitigation:", ML, y)
-        y += 4
-        body(mitigText, 3, [40, 80, 50])
+        pdf.setFontSize(7.5); pdf.setFont("helvetica","bolditalic"); pdf.setTextColor(239,68,68)
+        pdf.text("Attack impact:", ML, y); y += 4
+        impacts.forEach((imp, j) => {
+          checkPage(5)
+          pdf.setFontSize(8); pdf.setFont("helvetica","normal"); pdf.setTextColor(120,50,50)
+          pdf.text(`${j+1}. ${imp}`, ML+3, y); y += 4.5
+        })
       }
 
-      y += 3
-      divider([230, 230, 230])
+      // Mitigation steps
+      const steps: string[] = Array.isArray(r.mitigation_steps) && r.mitigation_steps.length
+        ? r.mitigation_steps
+        : r.mitigation ? [r.mitigation] : []
+      if (steps.length) {
+        checkPage(8)
+        pdf.setFontSize(7.5); pdf.setFont("helvetica","bolditalic"); pdf.setTextColor(34,197,94)
+        pdf.text("Mitigation:", ML, y); y += 4
+        steps.forEach((s, j) => {
+          checkPage(5)
+          pdf.setFontSize(8); pdf.setFont("helvetica","normal"); pdf.setTextColor(30,80,40)
+          const wrapped = pdf.splitTextToSize(`${j+1}. ${s}`, CW-5)
+          wrapped.forEach((line: string) => { checkPage(5); pdf.text(line, ML+3, y); y += 4.5 })
+        })
+      }
+
+      y += 3; divider([230,230,230])
     })
 
-    // ── LAST PAGE — FOOTER ───────────────────────────────────
+    // ── FOOTER on every page ─────────────────────────────
     const pageCount = (pdf as any).internal.getNumberOfPages()
     for (let p = 1; p <= pageCount; p++) {
       pdf.setPage(p)
-      pdf.setFillColor(8, 15, 32)
-      pdf.rect(0, PH - 10, PW, 10, "F")
-      pdf.setFontSize(7)
-      pdf.setFont("helvetica", "normal")
-      pdf.setTextColor(148, 163, 184)
-      pdf.text("TARA — AI Threat Analysis & Risk Assessment", ML, PH - 4)
-      pdf.text(`Page ${p} of ${pageCount}`, PW - MR, PH - 4, { align: "right" })
+      pdf.setFillColor(8,15,32); pdf.rect(0, PH-10, PW, 10, "F")
+      pdf.setFontSize(7); pdf.setFont("helvetica","normal"); pdf.setTextColor(148,163,184)
+      pdf.text("TARA — AI Threat Analysis & Risk Assessment", ML, PH-4)
+      pdf.text(`Page ${p} of ${pageCount}`, PW-MR, PH-4, { align:"right" })
     }
 
     pdf.save(`tara_report_${new Date().toISOString().slice(0,10)}.pdf`)

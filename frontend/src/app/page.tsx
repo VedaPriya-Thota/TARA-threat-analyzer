@@ -1,18 +1,18 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 /* ── Typing effect ── */
-function useTyping(words: string[], speed = 60, pause = 1800) {
+function useTyping(words: string[], speed = 65, pause = 2000) {
   const [display, setDisplay] = useState("")
-  const [wIdx, setWIdx] = useState(0)
-  const [cIdx, setCIdx] = useState(0)
-  const [del, setDel] = useState(false)
+  const [wIdx, setWIdx]       = useState(0)
+  const [cIdx, setCIdx]       = useState(0)
+  const [del,  setDel]        = useState(false)
 
   useEffect(() => {
-    const word = words[wIdx]
-    const delay = del ? speed / 2 : cIdx === word.length ? pause : speed
+    const word  = words[wIdx]
+    const delay = del ? speed / 2.2 : cIdx === word.length ? pause : speed
     const t = setTimeout(() => {
       if (!del && cIdx < word.length) {
         setDisplay(word.slice(0, cIdx + 1)); setCIdx(c => c + 1)
@@ -27,173 +27,289 @@ function useTyping(words: string[], speed = 60, pause = 1800) {
     return () => clearTimeout(t)
   }, [cIdx, del, wIdx, words, speed, pause])
 
-  return display
+  return { display, isDeleting: del }
+}
+
+/* ── Lightweight canvas particle field ── */
+function ParticleCanvas() {
+  const ref = useRef<HTMLCanvasElement>(null)
+
+  useEffect(() => {
+    const canvas = ref.current
+    if (!canvas) return
+    const ctx    = canvas.getContext("2d")
+    if (!ctx)    return
+
+    let raf: number
+    const W = canvas.offsetWidth
+    const H = canvas.offsetHeight
+    canvas.width  = W
+    canvas.height = H
+
+    type Pt = { x: number; y: number; r: number; vx: number; vy: number; o: number; vo: number }
+    const count = Math.min(55, Math.floor((W * H) / 14000))
+    const pts: Pt[] = Array.from({ length: count }, () => ({
+      x:  Math.random() * W,
+      y:  Math.random() * H,
+      r:  0.6 + Math.random() * 1.2,
+      vx: (Math.random() - .5) * 0.18,
+      vy: (Math.random() - .5) * 0.15,
+      o:  0.12 + Math.random() * 0.3,
+      vo: (Math.random() - .5) * 0.003,
+    }))
+
+    const draw = () => {
+      ctx.clearRect(0, 0, W, H)
+      pts.forEach(p => {
+        p.x  += p.vx; if (p.x < 0) p.x = W; if (p.x > W) p.x = 0
+        p.y  += p.vy; if (p.y < 0) p.y = H; if (p.y > H) p.y = 0
+        p.o  += p.vo
+        if (p.o < 0.06 || p.o > 0.42) p.vo *= -1
+        ctx.beginPath()
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2)
+        ctx.fillStyle = `rgba(34,211,238,${p.o.toFixed(2)})`
+        ctx.fill()
+      })
+
+      // draw faint connecting lines for nearby particles
+      for (let i = 0; i < pts.length; i++) {
+        for (let j = i + 1; j < pts.length; j++) {
+          const dx = pts[i].x - pts[j].x
+          const dy = pts[i].y - pts[j].y
+          const d  = Math.sqrt(dx * dx + dy * dy)
+          if (d < 110) {
+            ctx.beginPath()
+            ctx.moveTo(pts[i].x, pts[i].y)
+            ctx.lineTo(pts[j].x, pts[j].y)
+            ctx.strokeStyle = `rgba(34,211,238,${((1 - d / 110) * 0.06).toFixed(3)})`
+            ctx.lineWidth   = 0.6
+            ctx.stroke()
+          }
+        }
+      }
+      raf = requestAnimationFrame(draw)
+    }
+    draw()
+    return () => cancelAnimationFrame(raf)
+  }, [])
+
+  return (
+    <canvas
+      ref={ref}
+      style={{
+        position: "absolute", inset: 0,
+        width: "100%", height: "100%",
+        pointerEvents: "none", opacity: .55,
+      }}
+    />
+  )
 }
 
 const FEATURES = [
   {
     icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
         <line x1="12" y1="8" x2="12" y2="12"/>
         <circle cx="12" cy="16" r=".6" fill="currentColor"/>
       </svg>
     ),
-    color: "text-cyan-400",
-    iconBg: "bg-cyan-500/10 border border-cyan-500/20",
-    gradBorder: "bg-gradient-to-r from-cyan-500 to-blue-500",
+    accent:     "#22d3ee",
+    accentRgb:  "34,211,238",
+    iconBg:     "rgba(34,211,238,.08)",
+    iconBorder: "rgba(34,211,238,.18)",
+    gradBorder: "linear-gradient(135deg,#0e7490,#0284c7)",
     title: "Threat Detection",
-    body: "Automatically surface SQL injection, auth bypass, API abuse, and privilege escalation — mapped to attack vectors before adversaries exploit them.",
+    body:  "Automatically surface SQL injection, auth bypass, API abuse, and privilege escalation — mapped to attack vectors before adversaries exploit them.",
   },
   {
     icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
         <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
       </svg>
     ),
-    color: "text-green-400",
-    iconBg: "bg-green-500/10 border border-green-500/20",
-    gradBorder: "bg-gradient-to-r from-green-400 to-cyan-400",
+    accent:     "#4ade80",
+    accentRgb:  "74,222,128",
+    iconBg:     "rgba(74,222,128,.08)",
+    iconBorder: "rgba(74,222,128,.18)",
+    gradBorder: "linear-gradient(135deg,#166534,#0e7490)",
     title: "AI Risk Scoring",
-    body: "LLM-powered analysis calculates risk scores and prioritizes threats by severity, exploitability, and blast radius — so you fix what matters first.",
+    body:  "LLM-powered analysis calculates risk scores and prioritises threats by severity, exploitability, and blast radius — so you fix what matters first.",
   },
   {
     icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
         <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/>
       </svg>
     ),
-    color: "text-purple-400",
-    iconBg: "bg-purple-500/10 border border-purple-500/20",
-    gradBorder: "bg-gradient-to-r from-purple-500 to-pink-500",
+    accent:     "#a78bfa",
+    accentRgb:  "167,139,250",
+    iconBg:     "rgba(167,139,250,.08)",
+    iconBorder: "rgba(167,139,250,.18)",
+    gradBorder: "linear-gradient(135deg,#4c1d95,#be185d)",
     title: "STRIDE Classification",
-    body: "Every threat is mapped to the STRIDE framework with targeted mitigations — giving your team a structured, actionable security report.",
+    body:  "Every threat is mapped to the STRIDE framework with targeted mitigations — giving your team a structured, actionable security report.",
   },
 ]
 
 const SCAN_WORDS = ["REST APIs", "cloud infrastructure", "IoT firmware", "microservices", "auth layers", "database schemas"]
 
-export default function Home() {
-  const router = useRouter()
-  const typing = useTyping(SCAN_WORDS)
-
+/* ── Feature card (isolated so hover state is per-card) ── */
+function FeatureCard({ f, delay }: { f: typeof FEATURES[number]; delay: number }) {
+  const [hovered, setHovered] = useState(false)
   return (
     <div
-      className="min-h-screen flex flex-col items-center text-white relative overflow-hidden"
-      style={{ background: "radial-gradient(ellipse at 60% 0%, #0f172a 0%, #020617 55%)" }}
+      className="lp-feat-card"
+      style={{ animationDelay: `${delay}s` }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
+      {/* gradient border via box-shadow inset + pseudo — simulated with wrapper */}
+      <div
+        className="lp-feat-inner"
+        style={{
+          borderColor: hovered ? `rgba(${f.accentRgb},.35)` : "rgba(255,255,255,.06)",
+          boxShadow: hovered
+            ? `0 0 0 1px rgba(${f.accentRgb},.15), 0 16px 40px rgba(0,0,0,.4), 0 0 32px rgba(${f.accentRgb},.06)`
+            : "0 2px 12px rgba(0,0,0,.25)",
+          transform: hovered ? "translateY(-5px)" : "translateY(0)",
+        }}
+      >
+        {/* top accent line */}
+        <div
+          className="lp-feat-top-line"
+          style={{
+            background: f.gradBorder,
+            opacity: hovered ? 1 : 0,
+          }}
+        />
 
-      {/* Ambient glows */}
-      <div className="absolute top-0 left-0 w-[500px] h-[500px] rounded-full pointer-events-none"
-        style={{ background: "radial-gradient(circle, rgba(34,211,238,.07) 0%, transparent 70%)", filter: "blur(60px)" }} />
-      <div className="absolute bottom-0 right-0 w-[500px] h-[500px] rounded-full pointer-events-none"
-        style={{ background: "radial-gradient(circle, rgba(74,222,128,.06) 0%, transparent 70%)", filter: "blur(60px)" }} />
+        {/* Icon ring */}
+        <div
+          className="lp-feat-icon"
+          style={{
+            color: f.accent,
+            background: f.iconBg,
+            border: `1px solid ${f.iconBorder}`,
+            boxShadow: hovered ? `0 0 20px rgba(${f.accentRgb},.22)` : "none",
+            transform: hovered ? "scale(1.08)" : "scale(1)",
+          }}
+        >
+          {f.icon}
+        </div>
 
-      {/* Subtle dot grid */}
-      <div className="absolute inset-0 pointer-events-none opacity-30"
-        style={{ backgroundImage: "radial-gradient(circle, rgba(148,163,184,.12) 1px, transparent 1px)", backgroundSize: "28px 28px" }} />
+        <h3 className="lp-feat-title" style={{ color: f.accent }}>{f.title}</h3>
+        <p className="lp-feat-body">{f.body}</p>
 
-      {/* Nav */}
-      <header className="relative z-10 w-full max-w-5xl flex items-center px-8 py-6">
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-cyan-400" style={{ boxShadow: "0 0 8px #22d3ee" }} />
-          <span className="font-bold text-sm tracking-widest text-slate-200">TARA</span>
-          <span className="text-xs font-semibold text-slate-600 bg-slate-800/60 border border-slate-700/50 rounded-full px-2 py-0.5">v2.0</span>
+        {/* Arrow reveal on hover */}
+        <div className="lp-feat-arrow" style={{ opacity: hovered ? .7 : 0, transform: hovered ? "translateX(0)" : "translateX(-6px)", color: f.accent }}>
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="2" y1="8" x2="14" y2="8"/><polyline points="9,3 14,8 9,13"/>
+          </svg>
+          <span style={{ fontSize: ".72rem", fontWeight: 700 }}>Learn more</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default function Home() {
+  const router = useRouter()
+  const { display: typing } = useTyping(SCAN_WORDS)
+  const [ctaHovered, setCtaHovered] = useState(false)
+
+  return (
+    <div className="lp-root" style={{ background: "radial-gradient(ellipse at 60% 0%, #0f172a 0%, #020617 55%)" }}>
+
+      {/* ── Background layer ── */}
+      <div className="lp-bg-layer" aria-hidden>
+        {/* Particle canvas */}
+        <ParticleCanvas />
+
+        {/* Drifting dot grid */}
+        <div className="lp-grid-drift" />
+
+        {/* Two slow ambient glows */}
+        <div className="lp-ambient lp-ambient--tl" />
+        <div className="lp-ambient lp-ambient--br" />
+        <div className="lp-ambient lp-ambient--mid" />
+
+        {/* Scan line */}
+        <div className="lp-scanline" />
+      </div>
+
+      {/* ── Nav ── */}
+      <header className="lp-nav-bar">
+        <div className="lp-nav-brand">
+          <span className="lp-nav-dot" />
+          <span className="lp-nav-name">TARA</span>
+          <span className="lp-nav-badge">v2.0</span>
         </div>
       </header>
 
-      {/* Hero */}
-      <main className="relative z-10 flex flex-col items-center text-center px-6 pt-12 pb-16 max-w-3xl w-full">
+      {/* ── Hero ── */}
+      <main className="lp-hero-section">
 
-        {/* Eyebrow pill */}
-        <div className="inline-flex items-center gap-2 text-xs font-bold tracking-widest uppercase text-cyan-400 bg-cyan-500/8 border border-cyan-500/20 rounded-full px-4 py-2 mb-8">
-          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" style={{ boxShadow: "0 0 6px #22d3ee" }} />
+        {/* Eyebrow */}
+        <div className="lp-eyebrow">
+          <span className="lp-eyebrow-dot" />
           AI-Powered Threat Analysis &amp; Risk Assessment
         </div>
 
-        <h1 className="text-5xl md:text-6xl font-black leading-[1.08] tracking-tight mb-6">
-          Detect Threats Before
+        {/* Headline */}
+        <h1 className="lp-headline">
+          <span className="lp-headline-line1">Detect Threats Before</span>
           <br />
-          <span
-            className="bg-clip-text text-transparent"
-            style={{ backgroundImage: "linear-gradient(135deg, #22d3ee, #4ade80)", filter: "drop-shadow(0 0 24px rgba(34,211,238,.35))" }}
-          >
-            Attackers Do
-          </span>
+          <span className="lp-headline-accent">Attackers Do</span>
         </h1>
 
-        <p className="text-lg text-slate-400 leading-relaxed max-w-xl mb-8">
+        {/* Sub-line */}
+        <p className="lp-subline">
           TARA ingests your system architecture and uses large language models to surface
           attack vectors, STRIDE classifications, and prioritised mitigations — in seconds.
         </p>
 
-        {/* Typing indicator */}
-        <div className="flex items-center gap-3 mb-10 font-mono text-sm">
-          <span className="text-xs font-bold uppercase tracking-widest text-slate-600">Scanning</span>
-          <span className="text-cyan-400 font-semibold min-w-[160px] text-left">
-            {typing}
-            <span
-              className="inline-block w-0.5 h-4 bg-cyan-400 ml-0.5 align-middle rounded-sm"
-              style={{ animation: "lp-cursor-blink .75s step-end infinite" }}
-            />
+        {/* Scanning indicator */}
+        <div className="lp-scan-strip">
+          <span className="lp-scan-label">Scanning</span>
+          <span className="lp-scan-sep">›</span>
+          <span className="lp-scan-target">
+            {typing || "\u00A0"}
+            <span className="lp-cursor" />
           </span>
         </div>
 
         {/* Primary CTA */}
         <button
+          className={`lp-cta-btn${ctaHovered ? " lp-cta-btn--hovered" : ""}`}
           onClick={() => router.push("/dashboard")}
-          className="relative overflow-hidden flex items-center gap-3 text-white font-bold text-lg px-10 py-4 rounded-xl transition-all duration-200 hover:-translate-y-0.5 hover:scale-[1.02] active:scale-[.99]"
-          style={{
-            background: "linear-gradient(135deg, #0e7490, #059669)",
-            boxShadow: "0 0 32px rgba(34,211,238,.22), 0 4px 20px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.1)",
-            border: "1px solid rgba(34,211,238,.25)",
-          }}
+          onMouseEnter={() => setCtaHovered(true)}
+          onMouseLeave={() => setCtaHovered(false)}
         >
-          {/* shine sweep */}
-          <span
-            className="absolute inset-y-0 w-16 pointer-events-none"
-            style={{
-              background: "linear-gradient(90deg, transparent, rgba(255,255,255,.15), transparent)",
-              animation: "lp-shine 3.5s ease-in-out infinite 1s",
-            }}
-          />
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+          {/* Sheen sweep */}
+          <span className="lp-cta-sheen" />
+          {/* Glow ring (behind button) */}
+          <span className="lp-cta-glow-ring" style={{ opacity: ctaHovered ? 1 : 0 }} />
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, position: "relative", zIndex: 1 }}>
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
           </svg>
-          Launch Threat Analyzer
+          <span style={{ position: "relative", zIndex: 1 }}>Launch Threat Analyzer</span>
         </button>
 
-        <p className="mt-4 text-xs text-slate-600 tracking-wide">
-          No setup required · LLaMA 3.3-70B powered · STRIDE aligned
-        </p>
+        <p className="lp-cta-caption">No setup required · LLaMA 3.3-70B powered · STRIDE aligned</p>
 
       </main>
 
-      {/* Feature cards */}
-      <section className="relative z-10 grid md:grid-cols-3 gap-6 max-w-5xl w-full px-6 pb-16">
+      {/* ── Feature cards ── */}
+      <section className="lp-cards-grid">
         {FEATURES.map((f, i) => (
-          <div key={f.title} className={`p-px rounded-2xl ${f.gradBorder}`}
-            style={{ animation: "lp-card-in .55s ease both", animationDelay: `${i * 0.1}s`, opacity: 0, animationFillMode: "forwards" }}>
-            <div className="bg-slate-900/90 backdrop-blur-sm rounded-2xl p-8 h-full flex flex-col gap-4 hover:bg-slate-900/70 transition-all duration-200 group"
-              style={{ transition: "background .2s, transform .2s, box-shadow .2s" }}
-              onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.transform = "translateY(-3px)"; (e.currentTarget as HTMLDivElement).style.boxShadow = "0 12px 40px rgba(0,0,0,.35)" }}
-              onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.transform = ""; (e.currentTarget as HTMLDivElement).style.boxShadow = "" }}>
-              {/* Icon */}
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${f.color} ${f.iconBg} flex-shrink-0`}>
-                {f.icon}
-              </div>
-              {/* Title */}
-              <h3 className={`text-lg font-bold ${f.color}`}>{f.title}</h3>
-              {/* Body */}
-              <p className="text-slate-400 text-sm leading-relaxed flex-1">{f.body}</p>
-            </div>
-          </div>
+          <FeatureCard key={f.title} f={f} delay={0.55 + i * 0.12} />
         ))}
       </section>
 
-      {/* Bottom strip */}
-      <div className="relative z-10 flex items-center justify-center py-12 px-6 w-full max-w-5xl border-t border-slate-800/60">
-        <p className="text-slate-500 font-semibold text-base">Ready to secure your architecture?</p>
+      {/* ── Bottom strip ── */}
+      <div className="lp-bottom">
+        <p className="lp-bottom-text">Ready to secure your architecture?</p>
       </div>
 
     </div>

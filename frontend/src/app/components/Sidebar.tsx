@@ -13,40 +13,39 @@ const NAV = [
 
 export default function Sidebar() {
   const path = usePathname()
-  const [open, setOpen] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
 
-  // Close drawer on route change
-  useEffect(() => { setOpen(false) }, [path])
+  // Close mobile drawer on route change
+  useEffect(() => { setMobileOpen(false) }, [path])
 
-  // Close drawer when clicking outside on mobile
+  // Close mobile drawer when clicking outside
   useEffect(() => {
-    if (!open) return
+    if (!mobileOpen) return
     const handler = (e: MouseEvent) => {
       const target = e.target as HTMLElement
       if (!target.closest(".sidebar") && !target.closest(".sidebar-toggle")) {
-        setOpen(false)
+        setMobileOpen(false)
       }
     }
     document.addEventListener("mousedown", handler)
     return () => document.removeEventListener("mousedown", handler)
-  }, [open])
+  }, [mobileOpen])
 
   return (
     <>
       {/* Hamburger — mobile only */}
       <button
         className="sidebar-toggle"
-        onClick={() => setOpen(o => !o)}
-        aria-label={open ? "Close menu" : "Open menu"}
+        onClick={() => setMobileOpen(o => !o)}
+        aria-label={mobileOpen ? "Close menu" : "Open menu"}
       >
-        {open ? (
-          // × icon
+        {mobileOpen ? (
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <line x1="2" y1="2" x2="14" y2="14"/>
             <line x1="14" y1="2" x2="2" y2="14"/>
           </svg>
         ) : (
-          // ☰ icon
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <line x1="2" y1="4"  x2="14" y2="4"/>
             <line x1="2" y1="8"  x2="14" y2="8"/>
@@ -56,16 +55,31 @@ export default function Sidebar() {
       </button>
 
       {/* Backdrop — mobile only */}
-      {open && <div className="sidebar-backdrop" onClick={() => setOpen(false)} />}
+      {mobileOpen && <div className="sidebar-backdrop" onClick={() => setMobileOpen(false)} />}
 
-      <aside className={`sidebar${open ? " sidebar--open" : ""}`}>
+      <aside className={`sidebar${mobileOpen ? " sidebar--open" : ""}${collapsed ? " sidebar--collapsed" : ""}`}>
+        {/* Desktop collapse toggle */}
+        <button
+          className="sidebar-collapse-btn"
+          onClick={() => setCollapsed(c => !c)}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          <svg
+            width="14" height="14" viewBox="0 0 14 14" fill="none"
+            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+            style={{ transform: collapsed ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.25s" }}
+          >
+            <polyline points="9,2 4,7 9,12" />
+          </svg>
+        </button>
+
         <div className="brand">
           <div className="dot" />
-          <span>TARA</span>
+          <span className="brand-label">TARA</span>
         </div>
         <nav className="nav">
           {NAV.map(({ href, label, icon }) => (
-            <Link key={href} href={href} className={`nav-item${path === href ? " active" : ""}`}>
+            <Link key={href} href={href} className={`nav-item${path === href ? " active" : ""}`} title={collapsed ? label : undefined}>
               <span className="nav-icon">{icon}</span>
               <span className="nav-label">{label}</span>
             </Link>

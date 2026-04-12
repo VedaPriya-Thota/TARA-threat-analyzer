@@ -1,12 +1,12 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, Suspense } from "react"
+import { useSearchParams } from "next/navigation"
 import axios from "axios"
 import Sidebar from "../components/Sidebar"
 import RiskChart from "../components/RiskChart"
 import BackToHome from "../components/BackToHome"
 import jsPDF from "jspdf"
-import html2canvas from "html2canvas"
 
 /* ─────────────────────────────────────────────────────────
    CONSTANTS
@@ -310,7 +310,11 @@ function EmptyState({ onChipClick }: { onChipClick: (text: string) => void }) {
    LOADING STATE  (step-by-step messages)
 ───────────────────────────────────────────────────────── */
 const THINKING_MSGS = [
-  "Mapping attack surfaces…",
+  "Parsing input…",
+  "Mapping attack surface…",
+  "Classifying threats…",
+  "Calculating risk scores…",
+  "Generating mitigations…",
   "Cross-referencing threat vectors…",
   "Evaluating exploitability…",
   "Scoring blast radius…",
@@ -318,58 +322,160 @@ const THINKING_MSGS = [
   "Building mitigation plan…",
 ]
 
-function AnalysisLoader({ step, fileMode = false, urlMode = false }: { step: number; fileMode?: boolean; urlMode?: boolean }) {
-  const steps = urlMode ? URL_STEPS : fileMode ? FILE_STEPS : STEPS
-  const [thinkIdx, setThinkIdx] = useState(0)
+/* Rotating phrases shown below the main step — adds perceived AI depth */
+const SUBPHRASES: Record<string, string[]> = {
+  text: [
+    "Applying STRIDE methodology…",
+    "Identifying trust boundaries…",
+    "Checking for privilege escalation paths…",
+    "Reviewing authentication flows…",
+    "Analysing data exposure vectors…",
+    "Mapping lateral movement risks…",
+  ],
+  file: [
+    "Parsing configuration keys…",
+    "Scanning for hardcoded secrets…",
+    "Checking permission settings…",
+    "Detecting injection surfaces…",
+    "Reviewing exposed endpoints…",
+    "Flagging deprecated dependencies…",
+  ],
+  url: [
+    "Fingerprinting server stack…",
+    "Enumerating security headers…",
+    "Checking CORS policy…",
+    "Probing redirect chains…",
+    "Mapping exposed sub-resources…",
+    "Assessing TLS configuration…",
+  ],
+}
 
+function AnalysisLoader({ step, fileMode = false, urlMode = false }: { step: number; fileMode?: boolean; urlMode?: boolean }) {
+  const steps     = urlMode ? URL_STEPS : fileMode ? FILE_STEPS : STEPS
+  const modeKey   = urlMode ? "url" : fileMode ? "file" : "text"
+  const phrases   = SUBPHRASES[modeKey]
+
+  const [thinkIdx,  setThinkIdx]  = useState(0)
+  const [subIdx,    setSubIdx]    = useState(0)
+  const [subVisible,setSubVisible]= useState(true)
+  const [dotCount,  setDotCount]  = useState(1)
+  const [elapsed,   setElapsed]   = useState(0)
+
+  /* Rotate thinking messages */
   useEffect(() => {
     const t = setInterval(() => setThinkIdx(i => (i + 1) % THINKING_MSGS.length), 1800)
     return () => clearInterval(t)
   }, [])
 
+  /* Cross-fade sub-phrases */
+  useEffect(() => {
+    const cycle = () => {
+      setSubVisible(false)
+      setTimeout(() => {
+        setSubIdx(i => (i + 1) % phrases.length)
+        setSubVisible(true)
+      }, 300)
+    }
+    const t = setInterval(cycle, 2400)
+    return () => clearInterval(t)
+  }, [phrases])
+
+  /* Animated ellipsis dots */
+  useEffect(() => {
+    const t = setInterval(() => setDotCount(d => (d % 3) + 1), 500)
+    return () => clearInterval(t)
+  }, [])
+
+  /* Elapsed-time counter */
+  useEffect(() => {
+    const t = setInterval(() => setElapsed(s => s + 1), 1000)
+    return () => clearInterval(t)
+  }, [])
+
+  const pct = Math.round((step / (steps.length - 1)) * 100)
+
   return (
     <div className="analysis-loader">
-      {/* Spinner */}
+      {/* ── Spinner ── */}
       <div className="loader-spinner">
-        <div className="spinner-outer" />
-        <div className="spinner-inner" />
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ zIndex: 1 }}>
+        <div className="spinner-ring spinner-ring--outer" />
+        <div className="spinner-ring spinner-ring--mid" />
+        <div className="spinner-ring spinner-ring--inner" />
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+          stroke="#38bdf8" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
+          style={{ position: "relative", zIndex: 1 }}>
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
         </svg>
       </div>
 
-      {/* Steps list */}
+      {/* ── Steps list ── */}
       <div className="loader-steps">
-        <p className="loader-title">{urlMode ? "URL Surface Mapping" : fileMode ? "File Threat Analysis" : "AI Security Analysis"}</p>
+        <div className="loader-title-row">
+          <span className="loader-title">
+            {urlMode ? "URL Surface Mapping" : fileMode ? "File Threat Analysis" : "AI Security Analysis"}
+          </span>
+          <span className="loader-elapsed">{elapsed}s</span>
+        </div>
+
         {steps.map((text, i) => {
           const state = i < step ? "done" : i === step ? "active" : "pending"
           return (
             <div key={i} className={`loader-step loader-step--${state}`}>
               <span className="step-dot">
-                {state === "done"   && <DoneIcon />}
-                {state === "active" && <ActiveIcon />}
-                {state === "pending"&& <PendingIcon />}
+                {state === "done"    && <DoneIcon />}
+                {state === "active"  && <ActiveIcon />}
+                {state === "pending" && <PendingIcon />}
               </span>
-              <span className="step-text">{text}</span>
+              <span className="step-text">
+                {text}
+                {state === "active" && (
+                  <span className="step-dots" aria-hidden>
+                    {".".repeat(dotCount)}
+                  </span>
+                )}
+              </span>
             </div>
           )
         })}
+
+        {/* Sub-phrase — cross-fades between technical detail messages */}
+        <div className="loader-subphrase" style={{ opacity: subVisible ? 1 : 0 }}>
+          <span className="loader-subphrase-icon">⬡</span>
+          {phrases[subIdx]}
+        </div>
       </div>
 
-      {/* Progress + thinking message */}
+      {/* ── Progress bar + thinking message ── */}
       <div className="loader-progress">
-        <div className="loader-progress-track">
-          <div
-            className="loader-progress-fill"
-            style={{ width: `${Math.round((step / (steps.length - 1)) * 100)}%` }}
-          />
+        {/* Stage segments — one per step */}
+        <div className="stage-track">
+          {steps.map((_, i) => {
+            const state = i < step ? "done" : i === step ? "active" : "idle"
+            return (
+              <div
+                key={i}
+                className={`stage-segment${state === "done" ? " stage-segment--done" : state === "active" ? " stage-segment--active" : ""}`}
+              />
+            )
+          })}
         </div>
-        <span className="loader-progress-pct">
-          {Math.round((step / (steps.length - 1)) * 100)}%
-        </span>
-        <span className="loader-thinking-msg">
-          {THINKING_MSGS[thinkIdx]}
-        </span>
+        <div className="stage-labels">
+          {steps.map((text, i) => {
+            const state = i < step ? "done" : i === step ? "active" : "idle"
+            return (
+              <span key={i} className={`stage-label${state === "done" ? " stage-label--done" : state === "active" ? " stage-label--active" : ""}`}>
+                {text.split(" ")[0]}
+              </span>
+            )
+          })}
+        </div>
+
+        <div className="loader-progress-track" style={{ marginTop: 8 }}>
+          <div className="loader-progress-fill" style={{ width: `${pct}%` }} />
+          <div className="loader-progress-glow" style={{ left: `${pct}%` }} />
+        </div>
+        <span className="loader-progress-pct">{pct}%</span>
+        <span className="loader-thinking-msg">{THINKING_MSGS[thinkIdx]}</span>
       </div>
     </div>
   )
@@ -384,21 +490,36 @@ function DoneIcon() {
 }
 function ActiveIcon() {
   return (
-    <span style={{
-      display: "inline-block", width: 8, height: 8,
-      borderRadius: "50%", background: "#38bdf8",
-      boxShadow: "0 0 6px #38bdf8",
-      animation: "active-pulse 1s ease-in-out infinite",
-    }} />
+    <span className="loader-active-dot" />
   )
 }
 function PendingIcon() {
-  return (
-    <span style={{
-      display: "inline-block", width: 7, height: 7,
-      borderRadius: "50%", border: "1.5px solid #1e3a52",
-    }} />
-  )
+  return <span className="pending-dot" />
+}
+
+/* ─────────────────────────────────────────────────────────
+   ANIMATED COUNTER
+   Counts up from 0 → target over ~600 ms using easeOut
+───────────────────────────────────────────────────────── */
+function useCountUp(target: number, duration = 600): number {
+  const [display, setDisplay] = useState(0)
+  const prevTarget = useRef(0)
+
+  useEffect(() => {
+    if (target === prevTarget.current) return
+    const from  = prevTarget.current
+    prevTarget.current = target
+    const start = performance.now()
+    const tick  = (now: number) => {
+      const t   = Math.min((now - start) / duration, 1)
+      const ease = 1 - Math.pow(1 - t, 3)            // cubic ease-out
+      setDisplay(Math.round(from + (target - from) * ease))
+      if (t < 1) requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  }, [target, duration])
+
+  return display
 }
 
 /* ─────────────────────────────────────────────────────────
@@ -482,6 +603,7 @@ function AIInsights({ threats }: { threats: any[] }) {
     }}>
       {/* Header */}
       <div style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <span className="ai-live-dot" />
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
         </svg>
@@ -495,12 +617,12 @@ function AIInsights({ threats }: { threats: any[] }) {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, width: "100%" }}>
 
         {/* Overall risk */}
-        <div style={{ background: "rgba(255,255,255,.025)", borderRadius: 10, padding: "10px 12px" }}>
+        <div className={`insight-item${critCount > 0 ? " insight-item--critical" : ""}`} style={{ animation: "fade-up-sm 200ms var(--ease-out) both 60ms" }}>
           <div style={{ fontSize: ".62rem", color: "#334155", textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 600, marginBottom: 5 }}>Overall System Risk</div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{
               width: 8, height: 8, borderRadius: "50%", background: overallRisk.color,
-              boxShadow: `0 0 6px ${overallRisk.color}`, flexShrink: 0,
+              boxShadow: `0 0 8px ${overallRisk.color}`, flexShrink: 0,
             }} />
             <span style={{ fontWeight: 800, fontSize: ".9rem", color: overallRisk.color }}>{overallRisk.label}</span>
           </div>
@@ -512,7 +634,7 @@ function AIInsights({ threats }: { threats: any[] }) {
         </div>
 
         {/* Top vulnerability */}
-        <div style={{ background: "rgba(255,255,255,.025)", borderRadius: 10, padding: "10px 12px" }}>
+        <div className="insight-item insight-item--top" style={{ animation: "fade-up-sm 200ms var(--ease-out) both 110ms" }}>
           <div style={{ fontSize: ".62rem", color: "#334155", textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 600, marginBottom: 5 }}>Top Vulnerability</div>
           <div style={{ fontWeight: 700, fontSize: ".78rem", color: "#cbd5e1", lineHeight: 1.35, marginBottom: 4 }}>
             {top.threat.length > 48 ? top.threat.slice(0, 46) + "…" : top.threat}
@@ -528,7 +650,7 @@ function AIInsights({ threats }: { threats: any[] }) {
         </div>
 
         {/* Recommended focus */}
-        <div style={{ background: "rgba(255,255,255,.025)", borderRadius: 10, padding: "10px 12px" }}>
+        <div className="insight-item insight-item--focus" style={{ animation: "fade-up-sm 200ms var(--ease-out) both 160ms" }}>
           <div style={{ fontSize: ".62rem", color: "#334155", textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 600, marginBottom: 5 }}>Recommended Focus</div>
           <div style={{ fontWeight: 700, fontSize: ".82rem", color: "#e2e8f0", marginBottom: 4 }}>{focusArea}</div>
           <div style={{ fontSize: ".68rem", color: "#475569", lineHeight: 1.45 }}>
@@ -568,6 +690,7 @@ function Top3Threats({ threats }: { threats: any[] }) {
               display: "flex", alignItems: "center", gap: 10,
               background: "rgba(10,15,28,.7)", border: `1px solid ${meta.border}`,
               borderRadius: 10, padding: "9px 14px",
+              animation: `fade-up-sm 200ms var(--ease-out) both ${50 + i * 50}ms`,
             }}>
               {/* Rank */}
               <span style={{ fontSize: ".65rem", fontWeight: 800, color: "#1e3a52", width: 16, textAlign: "center", flexShrink: 0 }}>
@@ -598,6 +721,7 @@ function Top3Threats({ threats }: { threats: any[] }) {
    TOP THREAT SUMMARY CARDS
 ───────────────────────────────────────────────────────── */
 function TopThreatSummary({ threats }: { threats: any[] }) {
+  const animCount = useCountUp(threats.length)
   // One card per severity level that actually has threats
   const bySeverity = SEVERITY_ORDER
     .map(level => ({
@@ -615,14 +739,14 @@ function TopThreatSummary({ threats }: { threats: any[] }) {
     <div className="tts-wrapper">
       <div className="tts-header">
         <span className="tts-title">Threat Summary</span>
-        <span className="tts-count">{threats.length} threat{threats.length !== 1 ? "s" : ""} detected</span>
+        <span className="tts-count"><span className="count-up">{animCount}</span> threat{animCount !== 1 ? "s" : ""} detected</span>
       </div>
       <div className="tts-grid">
-        {bySeverity.map(({ level, meta, items }) => (
+        {bySeverity.map(({ level, meta, items }, idx) => (
           <div
             key={level}
             className="tts-card"
-            style={{ borderColor: meta.border, background: meta.bg }}
+            style={{ borderColor: meta.border, background: meta.bg, animationDelay: `${40 + idx * 55}ms` }}
           >
             {/* Header row */}
             <div className="tts-card-head">
@@ -678,7 +802,7 @@ function ThreatDeepDive({ threats }: { threats: any[] }) {
       {/* Section header */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg className="tdd-section-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
           <span style={{ fontSize: ".72rem", fontWeight: 700, color: "#818cf8", textTransform: "uppercase", letterSpacing: ".1em" }}>
@@ -712,26 +836,23 @@ function ThreatDeepDive({ threats }: { threats: any[] }) {
           return (
             <div
               key={i}
+              className={`tdd-card threat-card-host threat-card-discover${isOpen ? " tdd-card--open" : ""}`}
               style={{
-                borderRadius: 12,
                 border: `1px solid ${isOpen ? meta.border : "rgba(30,41,59,.8)"}`,
                 background: isOpen ? meta.bg : "rgba(10,15,28,.7)",
-                overflow: "hidden",
-                transition: "border-color .18s, background .18s",
+                animationDelay: `${30 + i * 40}ms`,
+                // Pass accent colour for the ::before top-line
+                ["--tdd-accent" as any]: meta.color,
               }}
             >
               {/* ── Collapsed header row ── */}
               <button
+                className="tdd-header-btn"
                 onClick={() => setOpenIdx(isOpen ? null : i)}
-                style={{
-                  width: "100%", display: "flex", alignItems: "center", gap: 12,
-                  padding: "11px 16px", background: "transparent", border: "none",
-                  cursor: "pointer", textAlign: "left",
-                }}
               >
-                {/* Rank */}
-                <span style={{ fontSize: ".62rem", fontWeight: 800, color: "#1e3a52", width: 18, flexShrink: 0 }}>
-                  #{i + 1}
+                {/* Rank — styled circle badge */}
+                <span className={`top3-rank top3-rank--${i < 3 ? i + 1 : "n"}`}>
+                  {i + 1}
                 </span>
 
                 {/* Threat name */}
@@ -768,101 +889,76 @@ function ThreatDeepDive({ threats }: { threats: any[] }) {
 
               {/* ── Expanded body ── */}
               {isOpen && (
-                <div style={{ padding: "0 16px 16px", display: "flex", flexDirection: "column", gap: 14 }}>
-                  <div style={{ height: 1, background: "rgba(255,255,255,.04)", marginBottom: 2 }} />
+                <div className="tdd-body">
+                  <div className="tdd-divider" />
 
                   {/* Three-column grid */}
-                  <div className="tdd-detail-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+                  <div className="tdd-detail-grid">
 
                     {/* Why this threat */}
-                    <div style={{ background: "rgba(255,255,255,.025)", borderRadius: 10, padding: "12px 14px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                    <div className="tdd-sub-panel">
+                      <div className="tdd-sub-title">
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#818cf8" strokeWidth="2.2" strokeLinecap="round">
                           <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
                         </svg>
-                        <span style={{ fontSize: ".62rem", fontWeight: 700, color: "#818cf8", textTransform: "uppercase", letterSpacing: ".07em" }}>
-                          Why This Threat
-                        </span>
+                        <span className="tdd-sub-label" style={{ color: "#818cf8" }}>Why This Threat</span>
                         {isFileThreat && (
-                          <span style={{ marginLeft: "auto", fontSize: ".58rem", fontWeight: 700, color: "#f59e0b", background: "rgba(245,158,11,.1)", border: "1px solid rgba(245,158,11,.2)", borderRadius: 4, padding: "1px 5px" }}>
-                            FILE
-                          </span>
+                          <span className="tdd-sub-badge" style={{ color: "#f59e0b", background: "rgba(245,158,11,.1)", border: "1px solid rgba(245,158,11,.2)" }}>FILE</span>
                         )}
                         {isUrlThreat && !isFileThreat && (
-                          <span style={{ marginLeft: "auto", fontSize: ".58rem", fontWeight: 700, color: "#a78bfa", background: "rgba(167,139,250,.1)", border: "1px solid rgba(167,139,250,.2)", borderRadius: 4, padding: "1px 5px" }}>
-                            URL
-                          </span>
+                          <span className="tdd-sub-badge" style={{ color: "#a78bfa", background: "rgba(167,139,250,.1)", border: "1px solid rgba(167,139,250,.2)" }}>URL</span>
                         )}
                       </div>
-                      <p style={{ margin: 0, fontSize: ".76rem", color: "#94a3b8", lineHeight: 1.6 }}>
-                        {whyText}
-                      </p>
+                      <p className="tdd-sub-text">{whyText}</p>
                       {evidenceText && (
-                        <div style={{ marginTop: 8, padding: "6px 10px", borderRadius: 7, background: "rgba(245,158,11,.06)", border: "1px solid rgba(245,158,11,.18)" }}>
-                          <span style={{ display: "block", fontSize: ".58rem", fontWeight: 700, color: "#f59e0b", textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 4 }}>
-                            Evidence
-                          </span>
-                          <code style={{ fontSize: ".7rem", color: "#fde68a", lineHeight: 1.5, wordBreak: "break-all", fontFamily: "ui-monospace, monospace" }}>
-                            {evidenceText}
-                          </code>
+                        <div className="tdd-evidence">
+                          <span className="tdd-evidence-label">Evidence</span>
+                          <code className="tdd-evidence-code">{evidenceText}</code>
                         </div>
                       )}
                     </div>
 
                     {/* Attack impact */}
-                    <div style={{ background: "rgba(255,255,255,.025)", borderRadius: 10, padding: "12px 14px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                    <div className="tdd-sub-panel">
+                      <div className="tdd-sub-title">
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={meta.color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
                         </svg>
-                        <span style={{ fontSize: ".62rem", fontWeight: 700, color: meta.color, textTransform: "uppercase", letterSpacing: ".07em" }}>
-                          Attack Impact
-                        </span>
+                        <span className="tdd-sub-label" style={{ color: meta.color }}>Attack Impact</span>
                       </div>
                       {attackImpact.length > 0 ? (
-                        <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 5 }}>
+                        <ul className="tdd-impact-list">
                           {attackImpact.map((item, j) => (
-                            <li key={j} style={{ display: "flex", gap: 7, alignItems: "flex-start" }}>
-                              <span style={{ width: 4, height: 4, borderRadius: "50%", background: meta.color, flexShrink: 0, marginTop: 6 }} />
-                              <span style={{ fontSize: ".74rem", color: "#94a3b8", lineHeight: 1.55 }}>{item}</span>
+                            <li key={j} className="tdd-impact-item">
+                              <span className="tdd-impact-dot" style={{ background: meta.color }} />
+                              <span className="tdd-impact-text">{item}</span>
                             </li>
                           ))}
                         </ul>
                       ) : (
-                        <p style={{ margin: 0, fontSize: ".74rem", color: "#334155" }}>No impact details available.</p>
+                        <p className="tdd-empty">No impact details available.</p>
                       )}
                     </div>
 
                     {/* Developer mitigations */}
-                    <div style={{ background: "rgba(255,255,255,.025)", borderRadius: 10, padding: "12px 14px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                    <div className="tdd-sub-panel">
+                      <div className="tdd-sub-title">
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="20 6 9 17 4 12"/>
                         </svg>
-                        <span style={{ fontSize: ".62rem", fontWeight: 700, color: "#22c55e", textTransform: "uppercase", letterSpacing: ".07em" }}>
-                          Developer Mitigations
-                        </span>
+                        <span className="tdd-sub-label" style={{ color: "#22c55e" }}>Developer Mitigations</span>
                       </div>
                       {mitigSteps.length > 0 ? (
-                        <ol style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 6 }}>
+                        <ol className="tdd-mitigation-list">
                           {mitigSteps.map((step, j) => (
-                            <li key={j} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                              <span style={{
-                                fontSize: ".58rem", fontWeight: 800, color: "#22c55e",
-                                background: "rgba(34,197,94,.1)", border: "1px solid rgba(34,197,94,.2)",
-                                borderRadius: 4, padding: "1px 5px", flexShrink: 0, marginTop: 2,
-                                minWidth: 18, textAlign: "center",
-                              }}>
-                                {j + 1}
-                              </span>
-                              <span style={{ fontSize: ".74rem", color: "#94a3b8", lineHeight: 1.55 }}>{step}</span>
+                            <li key={j} className="tdd-mitigation-item">
+                              <span className="tdd-mitigation-num">{j + 1}</span>
+                              <span className="tdd-mitigation-text">{step}</span>
                             </li>
                           ))}
                         </ol>
                       ) : (
-                        <p style={{ margin: 0, fontSize: ".74rem", color: "#334155" }}>
-                          {r.mitigation || "Apply security best practices."}
-                        </p>
+                        <p className="tdd-empty">{r.mitigation || "Apply security best practices."}</p>
                       )}
                     </div>
 
@@ -1053,13 +1149,26 @@ function SurfaceInfoBanner({ urlType, surfaceInfo }: { urlType: string; surfaceI
 /* ─────────────────────────────────────────────────────────
    MAIN PAGE
 ───────────────────────────────────────────────────────── */
-export default function Dashboard() {
-  const [description, setDescription] = useState("")
+function Dashboard() {
+  const searchParams = useSearchParams()
+
+  const [description, setDescription] = useState(() => {
+    // Pre-fill from history "re-run" link (?q=…)
+    // Can't call hooks inside useState initializer directly, so we'll
+    // handle it in a useEffect below.
+    return ""
+  })
   const [results, setResults]         = useState<any[]>([])
   const [loading, setLoading]         = useState(false)
   const [error, setError]             = useState("")
   const [step, setStep]               = useState(0)
   const stepRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Pre-fill description when arriving from History page via ?q=
+  useEffect(() => {
+    const q = searchParams.get("q")
+    if (q) setDescription(decodeURIComponent(q))
+  }, [searchParams])
 
   // ── File upload state ──
   const [analysisMode, setAnalysisMode]   = useState<"text" | "file" | "url">("text")
@@ -1167,14 +1276,246 @@ export default function Dashboard() {
     return analyzeText()
   }
 
-  const exportPDF = async () => {
-    const input = document.getElementById("report")
-    if (!input) return
-    const canvas = await html2canvas(input)
-    const imgData = canvas.toDataURL("image/png")
-    const pdf = new jsPDF("p", "mm", "a4")
-    pdf.addImage(imgData, "PNG", 10, 10, 190, 100)
-    pdf.save("tara_report.pdf")
+  const exportPDF = () => {
+    if (!results.length) return
+
+    const pdf   = new jsPDF("p", "mm", "a4")
+    const PW    = 210   // A4 width mm
+    const PH    = 297   // A4 height mm
+    const ML    = 14    // margin left
+    const MR    = 14    // margin right
+    const MT    = 16    // margin top
+    const MB    = 16    // margin bottom
+    const CW    = PW - ML - MR   // content width
+    let   y     = MT
+
+    // ── helpers ──────────────────────────────────────────────
+    const checkPage = (needed = 8) => {
+      if (y + needed > PH - MB) { pdf.addPage(); y = MT }
+    }
+
+    const heading = (text: string, size = 13, color: [number,number,number] = [30,30,30]) => {
+      checkPage(10)
+      pdf.setFontSize(size)
+      pdf.setTextColor(...color)
+      pdf.setFont("helvetica", "bold")
+      pdf.text(text, ML, y)
+      y += size * 0.45
+    }
+
+    const subheading = (text: string) => {
+      checkPage(8)
+      pdf.setFontSize(9)
+      pdf.setTextColor(80, 80, 80)
+      pdf.setFont("helvetica", "bold")
+      pdf.text(text, ML, y)
+      y += 5
+    }
+
+    const body = (text: string, indent = 0, color: [number,number,number] = [50,50,50]) => {
+      pdf.setFontSize(8.5)
+      pdf.setTextColor(...color)
+      pdf.setFont("helvetica", "normal")
+      const lines = pdf.splitTextToSize(text, CW - indent)
+      lines.forEach((line: string) => {
+        checkPage(5)
+        pdf.text(line, ML + indent, y)
+        y += 4.5
+      })
+    }
+
+    const pill = (text: string, x: number, yPos: number, bg: [number,number,number], fg: [number,number,number]) => {
+      pdf.setFillColor(...bg)
+      pdf.setTextColor(...fg)
+      pdf.setFontSize(7)
+      pdf.setFont("helvetica", "bold")
+      const w = pdf.getTextWidth(text) + 4
+      pdf.roundedRect(x, yPos - 3.5, w, 5, 1, 1, "F")
+      pdf.text(text, x + 2, yPos)
+      return w + 2
+    }
+
+    const divider = (color: [number,number,number] = [220,220,220]) => {
+      checkPage(4)
+      pdf.setDrawColor(...color)
+      pdf.setLineWidth(0.3)
+      pdf.line(ML, y, ML + CW, y)
+      y += 4
+    }
+
+    const riskColors: Record<string, { bg: [number,number,number]; fg: [number,number,number] }> = {
+      critical: { bg: [239,68,68],  fg: [255,255,255] },
+      high:     { bg: [249,115,22], fg: [255,255,255] },
+      medium:   { bg: [245,158,11], fg: [255,255,255] },
+      low:      { bg: [56,189,248], fg: [255,255,255] },
+    }
+
+    // ── PAGE 1 — COVER ────────────────────────────────────────
+    // Dark header bar
+    pdf.setFillColor(8, 15, 32)
+    pdf.rect(0, 0, PW, 48, "F")
+
+    pdf.setTextColor(255, 255, 255)
+    pdf.setFont("helvetica", "bold")
+    pdf.setFontSize(22)
+    pdf.text("TARA Threat Analysis Report", ML, 22)
+
+    pdf.setFontSize(9)
+    pdf.setFont("helvetica", "normal")
+    pdf.setTextColor(148, 163, 184)
+    pdf.text("AI-Powered Security Assessment  ·  STRIDE Framework", ML, 30)
+    pdf.text(`Generated: ${new Date().toLocaleString()}`, ML, 36)
+
+    y = 58
+
+    // ── Summary stats row ────────────────────────────────────
+    const sevCounts = { critical: 0, high: 0, medium: 0, low: 0 }
+    results.forEach(r => {
+      const l = r.risk_level?.toLowerCase()
+      if (l in sevCounts) (sevCounts as any)[l]++
+    })
+
+    const statBoxes = [
+      { label: "Total Threats", value: String(results.length),  bg: [15,23,42]  as [number,number,number] },
+      { label: "Critical",      value: String(sevCounts.critical), bg: [127,29,29]  as [number,number,number] },
+      { label: "High",          value: String(sevCounts.high),     bg: [124,45,18]  as [number,number,number] },
+      { label: "Medium",        value: String(sevCounts.medium),   bg: [113,63,18]  as [number,number,number] },
+      { label: "Low",           value: String(sevCounts.low),      bg: [12,58,92]   as [number,number,number] },
+    ]
+    const boxW = CW / statBoxes.length - 2
+    statBoxes.forEach((b, i) => {
+      const bx = ML + i * (boxW + 2)
+      pdf.setFillColor(...b.bg)
+      pdf.roundedRect(bx, y, boxW, 18, 2, 2, "F")
+      pdf.setTextColor(255, 255, 255)
+      pdf.setFont("helvetica", "bold")
+      pdf.setFontSize(14)
+      pdf.text(b.value, bx + boxW / 2, y + 9, { align: "center" })
+      pdf.setFontSize(6.5)
+      pdf.setFont("helvetica", "normal")
+      pdf.setTextColor(180, 200, 220)
+      pdf.text(b.label.toUpperCase(), bx + boxW / 2, y + 14.5, { align: "center" })
+    })
+    y += 26
+
+    // Avg score + top STRIDE
+    const avgScore = (results.reduce((s, r) => s + (r.risk_score ?? 0), 0) / results.length).toFixed(1)
+    const strideCounts: Record<string, number> = {}
+    results.forEach(r => { if (r.stride) strideCounts[r.stride] = (strideCounts[r.stride] ?? 0) + 1 })
+    const topStride = Object.entries(strideCounts).sort((a, b) => b[1] - a[1])[0]
+
+    pdf.setFontSize(8.5)
+    pdf.setFont("helvetica", "normal")
+    pdf.setTextColor(80, 80, 80)
+    pdf.text(`Average Risk Score: ${avgScore}`, ML, y)
+    if (topStride) pdf.text(`Dominant STRIDE Category: ${topStride[0]} (${topStride[1]} threats)`, ML + 70, y)
+    y += 8
+
+    divider()
+
+    // ── PAGE CONTENT — ALL THREATS ───────────────────────────
+    heading("Threat Analysis", 14, [8, 15, 32])
+    y += 2
+
+    const sorted = [...results].sort((a, b) => (b.risk_score ?? 0) - (a.risk_score ?? 0))
+
+    sorted.forEach((r, i) => {
+      const level = r.risk_level?.toLowerCase() ?? "low"
+      const rc    = riskColors[level] ?? riskColors.low
+
+      checkPage(30)
+
+      // Threat number + name band
+      pdf.setFillColor(245, 247, 250)
+      pdf.rect(ML, y - 1, CW, 9, "F")
+
+      pdf.setFontSize(7)
+      pdf.setFont("helvetica", "bold")
+      pdf.setTextColor(100, 116, 139)
+      pdf.text(`#${i + 1}`, ML + 1, y + 4.5)
+
+      pdf.setFontSize(9)
+      pdf.setTextColor(15, 23, 42)
+      const nameLines = pdf.splitTextToSize(r.threat ?? "Unknown threat", CW - 30)
+      pdf.text(nameLines[0], ML + 8, y + 4.5)
+
+      // Risk + STRIDE pills on the right
+      let px = ML + CW
+      if (r.stride) {
+        const sw = pdf.getTextWidth(r.stride) + 6
+        px -= sw
+        pdf.setFillColor(241, 245, 249)
+        pdf.setTextColor(71, 85, 105)
+        pdf.setFontSize(6.5)
+        pdf.roundedRect(px, y + 1, sw - 1, 4.5, 1, 1, "F")
+        pdf.text(r.stride, px + 2, y + 4.5)
+        px -= 2
+      }
+      const rlabel = (r.risk_level ?? "Low").charAt(0).toUpperCase() + (r.risk_level ?? "low").slice(1).toLowerCase()
+      const rw = pdf.getTextWidth(rlabel) + 5
+      px -= rw
+      pdf.setFillColor(...rc.bg)
+      pdf.setTextColor(...rc.fg)
+      pdf.setFontSize(6.5)
+      pdf.roundedRect(px, y + 1, rw - 1, 4.5, 1, 1, "F")
+      pdf.text(rlabel, px + 2, y + 4.5)
+
+      y += 11
+
+      // Details grid: score / category / confidence
+      const cols = [
+        `Score: ${r.risk_score ?? "—"}`,
+        `Category: ${r.category || r.stride || "—"}`,
+        `Confidence: ${r.confidence != null ? r.confidence + "%" : "—"}`,
+      ]
+      pdf.setFontSize(7.5)
+      pdf.setFont("helvetica", "normal")
+      pdf.setTextColor(100, 116, 139)
+      cols.forEach((c, ci) => pdf.text(c, ML + ci * (CW / 3), y))
+      y += 5.5
+
+      // Why flagged
+      if (r.why_flagged || r.evidence) {
+        pdf.setFontSize(7.5)
+        pdf.setFont("helvetica", "bolditalic")
+        pdf.setTextColor(100, 116, 139)
+        pdf.text("Why flagged:", ML, y)
+        y += 4
+        body(r.why_flagged || r.evidence || "", 3, [80, 80, 80])
+      }
+
+      // Mitigation
+      const mitigText: string = Array.isArray(r.mitigation_steps) && r.mitigation_steps.length
+        ? r.mitigation_steps.map((s: string, j: number) => `${j + 1}. ${s}`).join("  ")
+        : r.mitigation ?? ""
+      if (mitigText) {
+        checkPage(8)
+        pdf.setFontSize(7.5)
+        pdf.setFont("helvetica", "bolditalic")
+        pdf.setTextColor(34, 197, 94)
+        pdf.text("Mitigation:", ML, y)
+        y += 4
+        body(mitigText, 3, [40, 80, 50])
+      }
+
+      y += 3
+      divider([230, 230, 230])
+    })
+
+    // ── LAST PAGE — FOOTER ───────────────────────────────────
+    const pageCount = (pdf as any).internal.getNumberOfPages()
+    for (let p = 1; p <= pageCount; p++) {
+      pdf.setPage(p)
+      pdf.setFillColor(8, 15, 32)
+      pdf.rect(0, PH - 10, PW, 10, "F")
+      pdf.setFontSize(7)
+      pdf.setFont("helvetica", "normal")
+      pdf.setTextColor(148, 163, 184)
+      pdf.text("TARA — AI Threat Analysis & Risk Assessment", ML, PH - 4)
+      pdf.text(`Page ${p} of ${pageCount}`, PW - MR, PH - 4, { align: "right" })
+    }
+
+    pdf.save(`tara_report_${new Date().toISOString().slice(0,10)}.pdf`)
   }
 
   const critical = results.filter(r => r.risk_level?.toLowerCase() === "critical").length
@@ -1182,6 +1523,13 @@ export default function Dashboard() {
   const medium   = results.filter(r => r.risk_level?.toLowerCase() === "medium").length
   const low      = results.filter(r => r.risk_level?.toLowerCase() === "low").length
   const total    = results.length || 1
+
+  // Animated counters — count up when results arrive
+  const animTotal    = useCountUp(results.length)
+  const animCritical = useCountUp(critical)
+  const animHigh     = useCountUp(high)
+  const animMedium   = useCountUp(medium)
+  const animLow      = useCountUp(low)
 
   const chartData = [
     { name: "Critical", value: critical },
@@ -1203,7 +1551,12 @@ export default function Dashboard() {
             <p>User story review, system architecture analysis, file scanning, or URL surface mapping.</p>
           </div>
           <div className={`status-pill${loading ? " status-busy" : results.length ? " status-done" : ""}`}>
-            {loading ? "Analyzing…" : results.length ? `${results.length} threats found` : "Ready"}
+            {loading
+              ? <><span className="status-live-dot" />Analyzing…</>
+              : results.length
+                ? <><span className="status-live-dot status-live-dot--done" />{animTotal} threat{animTotal !== 1 ? "s" : ""} found</>
+                : <><span className="status-live-dot status-live-dot--idle" />Ready</>
+            }
           </div>
         </div>
 
@@ -1219,15 +1572,7 @@ export default function Dashboard() {
               <button
                 key={id}
                 onClick={() => switchMode(id)}
-                style={{
-                  display: "flex", alignItems: "center", gap: 6,
-                  padding: "6px 14px", borderRadius: 8, border: "1px solid",
-                  fontSize: ".78rem", fontWeight: 700, cursor: "pointer",
-                  background: analysisMode === id ? "rgba(56,189,248,.1)" : "transparent",
-                  borderColor: analysisMode === id ? "rgba(56,189,248,.35)" : "rgba(255,255,255,.07)",
-                  color: analysisMode === id ? "#38bdf8" : "#475569",
-                  transition: "all .15s",
-                }}
+                className={`mode-tab ${analysisMode === id ? "mode-tab--active" : "mode-tab--idle"}`}
               >
                 {icon}
                 {label}
@@ -1242,7 +1587,7 @@ export default function Dashboard() {
 
           {/* Text mode — User Story / Functional Requirement */}
           {analysisMode === "text" && (
-            <>
+            <div className="mode-panel-enter">
               <div className="panel-head">
                 <h2>User Story / Functional Requirement</h2>
                 <p className="muted-text">Describe a user story, feature, or system for shift-left security review.</p>
@@ -1299,12 +1644,12 @@ export default function Dashboard() {
                   ))}
                 </div>
               )}
-            </>
+            </div>
           )}
 
           {/* File mode */}
           {analysisMode === "file" && (
-            <>
+            <div className="mode-panel-enter">
               <div className="panel-head">
                 <h2>File Threat Analysis</h2>
                 <p className="muted-text">Upload a config or log file — YAML, JSON, TXT, or LOG.</p>
@@ -1315,18 +1660,18 @@ export default function Dashboard() {
                 onClear={clearFile}
                 error={fileError}
               />
-            </>
+            </div>
           )}
 
           {/* URL Surface Mapper mode */}
           {analysisMode === "url" && (
-            <>
+            <div className="mode-panel-enter">
               <div className="panel-head">
                 <h2>URL Surface Mapper</h2>
                 <p className="muted-text">Enter a public website or GitHub repo URL for passive surface analysis.</p>
               </div>
               <URLInputZone value={urlInput} onChange={setUrlInput} error={urlError} />
-            </>
+            </div>
           )}
 
           <div className="analysis-actions">
@@ -1367,7 +1712,7 @@ export default function Dashboard() {
 
         {/* ── Results or empty state ── */}
         {!loading && results.length > 0 && (
-          <div style={{ animation: "fade-up .35s ease both" }}>
+          <div className="results-reveal">
             <AIInsights threats={results} />
             <Top3Threats threats={results} />
             <TopThreatSummary threats={results} />
@@ -1388,10 +1733,10 @@ export default function Dashboard() {
                     {/* Severity count badges */}
                     <div className="sev-badges">
                       {[
-                        { key: "critical", count: critical, color: "#ef4444" },
-                        { key: "high",     count: high,     color: "#f97316" },
-                        { key: "medium",   count: medium,   color: "#f59e0b" },
-                        { key: "low",      count: low,      color: "#38bdf8" },
+                        { key: "critical", count: animCritical, color: "#ef4444" },
+                        { key: "high",     count: animHigh,     color: "#f97316" },
+                        { key: "medium",   count: animMedium,   color: "#f59e0b" },
+                        { key: "low",      count: animLow,      color: "#38bdf8" },
                       ].filter(b => b.count > 0).map(({ key, count, color }) => (
                         <span key={key} className="sev-badge" style={{ color, borderColor: `${color}33`, background: `${color}0f` }}>
                           <span className="sev-badge-dot" style={{ background: color }} />
@@ -1451,35 +1796,37 @@ export default function Dashboard() {
                 <section className="panel risk-panel">
                   <div className="panel-head">
                     <h2>Risk Visualization</h2>
-                    <span className="panel-head-sub">{results.length} threats analysed</span>
+                    <span className="panel-head-sub">{animTotal} threats analysed</span>
                   </div>
 
                   {/* Severity count row */}
                   <div className="sev-count-row">
                     {[
-                      { label: "Critical", count: critical, color: "#ef4444" },
-                      { label: "High",     count: high,     color: "#f97316" },
-                      { label: "Medium",   count: medium,   color: "#f59e0b" },
-                      { label: "Low",      count: low,      color: "#38bdf8" },
+                      { label: "Critical", count: animCritical, color: "#ef4444" },
+                      { label: "High",     count: animHigh,     color: "#f97316" },
+                      { label: "Medium",   count: animMedium,   color: "#f59e0b" },
+                      { label: "Low",      count: animLow,      color: "#38bdf8" },
                     ].map(({ label, count, color }) => (
                       <div key={label} className="sev-count-item" style={{ borderColor: `${color}22`, background: `${color}0a` }}>
-                        <span className="sev-count-num" style={{ color }}>{count}</span>
+                        <span className="sev-count-num count-up" style={{ color }}>{count}</span>
                         <span className="sev-count-label">{label}</span>
                       </div>
                     ))}
                   </div>
 
-                  <RiskChart data={chartData} />
+                  <div className="chart-reveal">
+                    <RiskChart data={chartData} />
+                  </div>
 
                   <div className="bars">
                     {[
-                      { label: "Critical", count: critical, color: "#ef4444" },
-                      { label: "High",     count: high,     color: "#f97316" },
-                      { label: "Medium",   count: medium,   color: "#f59e0b" },
-                      { label: "Low",      count: low,      color: "#38bdf8" },
-                    ].map(({ label, count, color }) => (
-                      <div key={label} className="bar-row">
-                        <span className="bar-label" style={{ color: count > 0 ? color : undefined }}>
+                      { label: "Critical", count: animCritical, raw: critical, color: "#ef4444" },
+                      { label: "High",     count: animHigh,     raw: high,     color: "#f97316" },
+                      { label: "Medium",   count: animMedium,   raw: medium,   color: "#f59e0b" },
+                      { label: "Low",      count: animLow,      raw: low,      color: "#38bdf8" },
+                    ].map(({ label, count, raw, color }, idx) => (
+                      <div key={label} className="bar-row" style={{ animation: `fade-up-sm 220ms var(--ease-out) both ${60 + idx * 60}ms` }}>
+                        <span className="bar-label" style={{ color: raw > 0 ? color : undefined }}>
                           {label}
                           <span className="bar-count">{count}</span>
                         </span>
@@ -1487,14 +1834,14 @@ export default function Dashboard() {
                           <div
                             className="bar-fill"
                             style={{
-                              width: `${Math.max(count > 0 ? 3 : 0, (count / total) * 100)}%`,
+                              width: `${Math.max(raw > 0 ? 3 : 0, (raw / total) * 100)}%`,
                               background: `linear-gradient(90deg, ${color}66, ${color})`,
-                              boxShadow: count > 0 ? `0 0 10px ${color}44` : "none",
+                              boxShadow: raw > 0 ? `0 0 10px ${color}44` : "none",
                             }}
                           />
                         </div>
-                        <span className="bar-pct" style={{ color: count > 0 ? color : "#1e293b" }}>
-                          {Math.round((count / total) * 100)}%
+                        <span className="bar-pct" style={{ color: raw > 0 ? color : "#1e293b" }}>
+                          {Math.round((raw / total) * 100)}%
                         </span>
                       </div>
                     ))}
@@ -1503,7 +1850,7 @@ export default function Dashboard() {
                   <div className="risk-summary-strip">
                     <div className="rss-item">
                       <span className="rss-label">Total</span>
-                      <span className="rss-val">{results.length}</span>
+                      <span className="rss-val count-up">{animTotal}</span>
                     </div>
                     <div className="rss-divider" />
                     <div className="rss-item">
@@ -1532,5 +1879,14 @@ export default function Dashboard() {
 
       </div>
     </div>
+  )
+}
+
+/* Next.js requires useSearchParams to be inside a Suspense boundary */
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={null}>
+      <Dashboard />
+    </Suspense>
   )
 }

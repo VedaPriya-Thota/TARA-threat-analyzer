@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import Sidebar from "../components/Sidebar";
 import BackToHome from "../components/BackToHome";
 
-/* ── Badge helpers ── */
+/* ─────────────────────────────────────────────────────────
+   BADGE HELPERS
+───────────────────────────────────────────────────────── */
 const RISK_META: Record<string, { color: string; bg: string; border: string }> = {
   critical: { color: "#ef4444", bg: "rgba(239,68,68,.1)",   border: "rgba(239,68,68,.25)"  },
   high:     { color: "#f97316", bg: "rgba(249,115,22,.1)",  border: "rgba(249,115,22,.25)" },
@@ -12,33 +15,37 @@ const RISK_META: Record<string, { color: string; bg: string; border: string }> =
   low:      { color: "#22c55e", bg: "rgba(34,197,94,.1)",   border: "rgba(34,197,94,.25)"  },
 };
 
+const STRIDE_COLORS: Record<string, { color: string; bg: string; border: string }> = {
+  spoofing:                { color: "#fb7185", bg: "rgba(244,63,94,.08)",   border: "rgba(244,63,94,.2)"   },
+  tampering:               { color: "#fb923c", bg: "rgba(249,115,22,.08)",  border: "rgba(249,115,22,.2)"  },
+  repudiation:             { color: "#c084fc", bg: "rgba(168,85,247,.08)",  border: "rgba(168,85,247,.2)"  },
+  "information disclosure":{ color: "#60a5fa", bg: "rgba(59,130,246,.08)",  border: "rgba(59,130,246,.2)"  },
+  "denial of service":     { color: "#f87171", bg: "rgba(239,68,68,.08)",   border: "rgba(239,68,68,.2)"   },
+  "elevation of privilege":{ color: "#4ade80", bg: "rgba(34,197,94,.08)",   border: "rgba(34,197,94,.2)"   },
+};
+
+const SEV_ORDER = ["critical", "high", "medium", "low"];
+
+function topLevel(threats: any[]): string {
+  for (const s of SEV_ORDER) {
+    if (threats.some(t => t.risk_level?.toLowerCase() === s)) return s;
+  }
+  return "low";
+}
+
 function RiskBadge({ level }: { level: string }) {
-  const key  = level?.toLowerCase() ?? "";
-  const meta = RISK_META[key];
-  if (!meta) return (
-    <span style={{ fontSize: ".68rem", fontWeight: 700, color: "#475569", background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.08)", borderRadius: 999, padding: "3px 9px", whiteSpace: "nowrap" }}>
-      {level || "Unknown"}
-    </span>
-  );
+  const meta = RISK_META[level?.toLowerCase()] ?? { color: "#475569", bg: "rgba(255,255,255,.05)", border: "rgba(255,255,255,.08)" };
   return (
     <span style={{ fontSize: ".68rem", fontWeight: 700, color: meta.color, background: meta.bg, border: `1px solid ${meta.border}`, borderRadius: 999, padding: "3px 9px", whiteSpace: "nowrap" }}>
-      {level}
+      {level || "Unknown"}
     </span>
   );
 }
 
 function StrideBadge({ value }: { value: string }) {
-  const STRIDE_COLORS: Record<string, { color: string; bg: string; border: string }> = {
-    spoofing:               { color: "#fb7185", bg: "rgba(244,63,94,.08)",   border: "rgba(244,63,94,.2)"   },
-    tampering:              { color: "#fb923c", bg: "rgba(249,115,22,.08)",  border: "rgba(249,115,22,.2)"  },
-    repudiation:            { color: "#c084fc", bg: "rgba(168,85,247,.08)",  border: "rgba(168,85,247,.2)"  },
-    "information disclosure":{ color: "#60a5fa", bg: "rgba(59,130,246,.08)", border: "rgba(59,130,246,.2)"  },
-    "denial of service":    { color: "#f87171", bg: "rgba(239,68,68,.08)",   border: "rgba(239,68,68,.2)"   },
-    "elevation of privilege":{ color: "#4ade80", bg: "rgba(34,197,94,.08)",  border: "rgba(34,197,94,.2)"   },
-  };
   const meta = STRIDE_COLORS[value?.toLowerCase()] ?? { color: "#94a3b8", bg: "rgba(148,163,184,.06)", border: "rgba(148,163,184,.15)" };
   return (
-    <span style={{ fontSize: ".67rem", fontWeight: 700, color: meta.color, background: meta.bg, border: `1px solid ${meta.border}`, borderRadius: 6, padding: "3px 8px", whiteSpace: "nowrap", letterSpacing: ".01em" }}>
+    <span style={{ fontSize: ".67rem", fontWeight: 700, color: meta.color, background: meta.bg, border: `1px solid ${meta.border}`, borderRadius: 6, padding: "3px 8px", whiteSpace: "nowrap" }}>
       {value}
     </span>
   );
@@ -69,48 +76,186 @@ function ScoreCell({ score }: { score: number }) {
   );
 }
 
-/* ── Column header config ── */
-const COLS = [
-  { key: "system",    label: "System",       align: "left"   },
-  { key: "threat",    label: "Threat",       align: "left"   },
-  { key: "stride",    label: "STRIDE",       align: "left"   },
-  { key: "likelihood",label: "Likelihood",   align: "left"   },
-  { key: "impact",    label: "Impact",       align: "left"   },
-  { key: "score",     label: "Score",        align: "center" },
-  { key: "risk",      label: "Risk Level",   align: "center" },
-  { key: "conf",      label: "Confidence",   align: "center" },
-  { key: "mitigation",label: "Mitigation",   align: "left"   },
-] as const;
+/* ─────────────────────────────────────────────────────────
+   SESSION CARD  — one card per unique system_description
+───────────────────────────────────────────────────────── */
+function SessionCard({
+  description, threats, index, onRerun,
+}: {
+  description: string;
+  threats: any[];
+  index: number;
+  onRerun: (desc: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const topLvl   = topLevel(threats);
+  const topMeta  = RISK_META[topLvl] ?? RISK_META.low;
+  const avgScore = (threats.reduce((s, t) => s + (t.risk_score ?? 0), 0) / threats.length).toFixed(1);
 
+  const counts = SEV_ORDER.map(s => ({
+    level: s,
+    meta: RISK_META[s],
+    n: threats.filter(t => t.risk_level?.toLowerCase() === s).length,
+  })).filter(c => c.n > 0);
+
+  return (
+    <div
+      className="hist-session-card"
+      style={{ animationDelay: `${index * 55}ms` }}
+    >
+      {/* ── Card header ── */}
+      <div className="hist-session-head">
+        {/* Left: input preview + meta */}
+        <div className="hist-session-left">
+          <div className="hist-session-desc" title={description}>
+            {description.length > 120 ? description.slice(0, 118) + "…" : description}
+          </div>
+          <div className="hist-session-meta">
+            <span className="hist-session-count">
+              {threats.length} threat{threats.length !== 1 ? "s" : ""}
+            </span>
+            <span className="hist-session-sep">·</span>
+            <span style={{ fontSize: ".72rem", color: "#334155" }}>
+              Avg score {avgScore}
+            </span>
+            {counts.map(c => (
+              <span key={c.level} style={{
+                fontSize: ".67rem", fontWeight: 700, color: c.meta.color,
+                background: c.meta.bg, border: `1px solid ${c.meta.border}`,
+                borderRadius: 999, padding: "1px 7px",
+              }}>
+                {c.n} {c.level}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* Right: actions */}
+        <div className="hist-session-actions">
+          <button
+            className="hist-rerun-btn"
+            onClick={() => onRerun(description)}
+            title="Re-run this analysis on the Dashboard"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="1 4 1 10 7 10"/>
+              <path d="M3.51 15a9 9 0 1 0 .49-3.45"/>
+            </svg>
+            Re-run
+          </button>
+
+          <button
+            className="hist-expand-btn"
+            onClick={() => setExpanded(e => !e)}
+            title={expanded ? "Collapse threats" : "Expand threats"}
+          >
+            <svg width="13" height="13" viewBox="0 0 12 12" fill="none"
+              stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
+              style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform .2s" }}>
+              <polyline points="2 4 6 8 10 4"/>
+            </svg>
+            {expanded ? "Hide" : "View"} threats
+          </button>
+        </div>
+      </div>
+
+      {/* ── Threat rows (collapsible) ── */}
+      {expanded && (
+        <div className="hist-threat-table-wrap">
+          <table className="hist-threat-table">
+            <thead>
+              <tr>
+                {["Threat", "STRIDE", "Risk", "Score", "Confidence", "Mitigation"].map(h => (
+                  <th key={h}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[...threats].sort((a, b) => (b.risk_score ?? 0) - (a.risk_score ?? 0)).map((t, i) => (
+                <tr key={i} className="hist-threat-row">
+                  <td className="hist-td-threat">
+                    <div className="hist-threat-name">{t.threat}</div>
+                    {t.category && <div className="hist-threat-cat">{t.category}</div>}
+                  </td>
+                  <td><StrideBadge value={t.stride} /></td>
+                  <td><RiskBadge level={t.risk_level} /></td>
+                  <td style={{ textAlign: "center" }}><ScoreCell score={t.risk_score ?? 0} /></td>
+                  <td style={{ textAlign: "center" }}><ConfBadge value={t.confidence ?? null} /></td>
+                  <td className="hist-td-mitigation">{t.mitigation}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────
+   PAGE
+───────────────────────────────────────────────────────── */
 export default function HistoryPage() {
-  const [history, setHistory] = useState<any[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error,   setError]   = useState<string | null>(null);
+  const router  = useRouter();
+  const [history,  setHistory]  = useState<any[]>([]);
+  const [loading,  setLoading]  = useState(true);
+  const [error,    setError]    = useState<string | null>(null);
+  const [search,   setSearch]   = useState("");
+  const [sortBy,   setSortBy]   = useState<"score" | "threats" | "alpha">("score");
 
   useEffect(() => {
-    const fetchHistory = async () => {
+    (async () => {
       try {
         setLoading(true);
-        console.log("Fetching history from http://127.0.0.1:8000/analysis/history...");
         const res  = await fetch("http://127.0.0.1:8000/analysis/history");
         const data = await res.json();
-        console.log("History API response:", data);
-        if (Array.isArray(data)) {
-          data.sort((a, b) => b.risk_score - a.risk_score);
-          setHistory(data);
-        } else {
-          setHistory([]);
-          console.error("Data is not an array:", data);
-        }
-      } catch (err) {
-        console.error(err);
-        setError("Failed to load threat history. Check backend.");
+        setHistory(Array.isArray(data) ? data : []);
+      } catch {
+        setError("Failed to load threat history. Is the backend running?");
       } finally {
         setLoading(false);
       }
-    };
-    fetchHistory();
+    })();
   }, []);
+
+  /* Group flat rows → sessions keyed by system_description */
+  const sessions = useMemo(() => {
+    const map = new Map<string, any[]>();
+    for (const row of history) {
+      const key = row.system_description ?? "Unknown input";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(row);
+    }
+    return Array.from(map.entries()).map(([desc, threats]) => ({ desc, threats }));
+  }, [history]);
+
+  /* Filter + sort sessions */
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let out = q
+      ? sessions.filter(s => s.desc.toLowerCase().includes(q) || s.threats.some((t: any) => t.threat?.toLowerCase().includes(q)))
+      : sessions;
+
+    if (sortBy === "score") {
+      out = [...out].sort((a, b) => {
+        const maxA = Math.max(...a.threats.map((t: any) => t.risk_score ?? 0));
+        const maxB = Math.max(...b.threats.map((t: any) => t.risk_score ?? 0));
+        return maxB - maxA;
+      });
+    } else if (sortBy === "threats") {
+      out = [...out].sort((a, b) => b.threats.length - a.threats.length);
+    } else {
+      out = [...out].sort((a, b) => a.desc.localeCompare(b.desc));
+    }
+    return out;
+  }, [sessions, search, sortBy]);
+
+  const handleRerun = (desc: string) => {
+    router.push(`/dashboard?q=${encodeURIComponent(desc)}`);
+  };
+
+  const totalThreats = history.length;
 
   return (
     <div
@@ -121,12 +266,12 @@ export default function HistoryPage() {
       <Sidebar />
 
       <div className="flex-1 overflow-x-hidden" style={{ padding: "32px 40px" }}>
-        <div style={{ maxWidth: 1400, margin: "0 auto" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
 
           {/* ── Page header ── */}
-          <div style={{ marginBottom: 28, paddingBottom: 20, borderBottom: "1px solid rgba(30,41,59,.8)" }}>
+          <div style={{ marginBottom: 28, paddingBottom: 20, borderBottom: "1px solid rgba(30,41,59,.8)", animation: "fade-up 200ms ease both" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#818cf8", boxShadow: "0 0 6px #818cf8", display: "inline-block" }} />
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#818cf8", boxShadow: "0 0 6px #818cf8", display: "inline-block", animation: "live-ring-cyan 2.4s ease-out infinite" }} />
               <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "#818cf8" }}>
                 Intelligence Records
               </span>
@@ -140,165 +285,114 @@ export default function HistoryPage() {
               Threat History
             </h1>
             <p style={{ marginTop: 6, fontSize: ".85rem", color: "#475569" }}>
-              All previous threat intelligence scans, sorted by risk score.
+              {sessions.length > 0
+                ? `${sessions.length} past analysis session${sessions.length !== 1 ? "s" : ""} · ${totalThreats} total threats — click Re-run to load any session back into the dashboard.`
+                : "All previous threat intelligence scans."}
             </p>
           </div>
 
-          {/* ── Main card ── */}
-          <div style={{
-            background: "rgba(10,15,28,.9)",
-            border: "1px solid rgba(30,41,59,.9)",
-            borderRadius: 16,
-            overflow: "hidden",
-            boxShadow: "0 8px 32px rgba(0,0,0,.3)",
-          }}>
+          {/* ── Loading ── */}
+          {loading && (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 24px", gap: 16 }}>
+              <div style={{ width: 36, height: 36, border: "3px solid rgba(99,102,241,.2)", borderTopColor: "#818cf8", borderRadius: "50%", animation: "spin-cw .8s linear infinite" }} />
+              <p style={{ color: "#475569", fontWeight: 500, fontSize: ".85rem" }}>Loading history…</p>
+            </div>
+          )}
 
-            {/* ── Loading ── */}
-            {loading && (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 24px", gap: 16 }}>
-                <div style={{ width: 36, height: 36, border: "3px solid rgba(99,102,241,.2)", borderTopColor: "#818cf8", borderRadius: "50%", animation: "spin-cw .8s linear infinite" }} />
-                <p style={{ color: "#475569", fontWeight: 500, fontSize: ".85rem" }}>Loading history…</p>
-              </div>
-            )}
+          {/* ── Error ── */}
+          {!loading && error && (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 24px", gap: 12 }}>
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: .5 }}>
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+              <p style={{ color: "#f87171", fontWeight: 600, fontSize: ".9rem" }}>{error}</p>
+              <button onClick={() => window.location.reload()} className="hist-retry-btn">Retry</button>
+            </div>
+          )}
 
-            {/* ── Error ── */}
-            {!loading && error && (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 24px", gap: 12 }}>
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: .5 }}>
-                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          {/* ── Empty ── */}
+          {!loading && !error && sessions.length === 0 && (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 24px", gap: 12 }}>
+              <div style={{ width: 56, height: 56, borderRadius: "50%", background: "rgba(30,58,82,.35)", border: "1px solid rgba(30,58,82,.6)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1e3a52" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                 </svg>
-                <p style={{ color: "#f87171", fontWeight: 600, fontSize: ".9rem" }}>{error}</p>
-                <button
-                  onClick={() => window.location.reload()}
-                  style={{ marginTop: 8, padding: "7px 20px", borderRadius: 8, border: "1px solid rgba(255,255,255,.08)", background: "rgba(255,255,255,.04)", color: "#94a3b8", fontSize: ".8rem", cursor: "pointer" }}
-                >
-                  Retry
-                </button>
               </div>
-            )}
+              <p style={{ color: "#334155", fontWeight: 600, fontSize: ".9rem" }}>No threat history yet</p>
+              <p style={{ color: "#1e3a52", fontSize: ".78rem" }}>Run an analysis on the Dashboard to populate records here.</p>
+              <button className="hist-rerun-btn" style={{ marginTop: 8 }} onClick={() => router.push("/dashboard")}>
+                Go to Dashboard
+              </button>
+            </div>
+          )}
 
-            {/* ── Empty ── */}
-            {!loading && !error && history.length === 0 && (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 24px", gap: 12 }}>
-                <div style={{ width: 56, height: 56, borderRadius: "50%", background: "rgba(30,58,82,.35)", border: "1px solid rgba(30,58,82,.6)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1e3a52" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          {/* ── Sessions list ── */}
+          {!loading && !error && sessions.length > 0 && (
+            <>
+              {/* Toolbar */}
+              <div className="hist-toolbar">
+                {/* Search */}
+                <div className="hist-search-wrap">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="2" strokeLinecap="round">
+                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
                   </svg>
+                  <input
+                    className="hist-search"
+                    type="text"
+                    placeholder="Search sessions or threats…"
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                  />
+                  {search && (
+                    <button className="hist-search-clear" onClick={() => setSearch("")} aria-label="Clear">
+                      ×
+                    </button>
+                  )}
                 </div>
-                <p style={{ color: "#334155", fontWeight: 600, fontSize: ".9rem" }}>No threat history available</p>
-                <p style={{ color: "#1e3a52", fontSize: ".78rem" }}>Run an analysis on the Dashboard to populate records here.</p>
+
+                {/* Sort */}
+                <div className="hist-sort-group">
+                  <span className="hist-sort-label">Sort:</span>
+                  {(["score", "threats", "alpha"] as const).map(opt => (
+                    <button
+                      key={opt}
+                      className={`hist-sort-btn${sortBy === opt ? " active" : ""}`}
+                      onClick={() => setSortBy(opt)}
+                    >
+                      {opt === "score" ? "Top Risk" : opt === "threats" ? "Most Threats" : "A–Z"}
+                    </button>
+                  ))}
+                </div>
               </div>
-            )}
 
-            {/* ── Table ── */}
-            {!loading && !error && history.length > 0 && (
-              <>
-                {/* Row count */}
-                <div style={{ padding: "12px 20px", borderBottom: "1px solid rgba(30,41,59,.8)", display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: ".72rem", fontWeight: 700, color: "#334155", textTransform: "uppercase", letterSpacing: ".06em" }}>
-                    {history.length} record{history.length !== 1 ? "s" : ""}
-                  </span>
-                  <span style={{ fontSize: ".68rem", color: "#1e3a52" }}>· sorted by risk score descending</span>
-                </div>
+              {/* Result count when searching */}
+              {search && (
+                <p className="hist-filter-info">
+                  {filtered.length} session{filtered.length !== 1 ? "s" : ""} matching <strong>"{search}"</strong>
+                </p>
+              )}
 
-                {/* Scrollable table wrapper */}
-                <div style={{
-                  overflowX: "auto",
-                  overflowY: "auto",
-                  maxHeight: "calc(100vh - 280px)",
-                  scrollbarWidth: "thin",
-                  scrollbarColor: "#1e293b transparent",
-                }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: ".8rem", whiteSpace: "nowrap" }}>
+              {/* Session cards */}
+              <div className="hist-sessions-list">
+                {filtered.length === 0 ? (
+                  <p style={{ color: "#334155", fontSize: ".85rem", padding: "32px 0", textAlign: "center" }}>
+                    No sessions match your search.
+                  </p>
+                ) : (
+                  filtered.map(({ desc, threats }, i) => (
+                    <SessionCard
+                      key={desc}
+                      description={desc}
+                      threats={threats}
+                      index={i}
+                      onRerun={handleRerun}
+                    />
+                  ))
+                )}
+              </div>
+            </>
+          )}
 
-                    {/* Sticky header */}
-                    <thead style={{ position: "sticky", top: 0, zIndex: 10, background: "rgba(5,7,18,.97)", backdropFilter: "blur(8px)" }}>
-                      <tr>
-                        {COLS.map(col => (
-                          <th
-                            key={col.key}
-                            style={{
-                              padding: "10px 16px",
-                              textAlign: col.align as any,
-                              fontSize: ".63rem",
-                              fontWeight: 700,
-                              textTransform: "uppercase",
-                              letterSpacing: ".07em",
-                              color: "#334155",
-                              borderBottom: "1px solid rgba(30,41,59,.9)",
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            {col.label}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-
-                    <tbody>
-                      {history.map((h, i) => (
-                        <tr
-                          key={i}
-                          style={{ borderBottom: "1px solid rgba(255,255,255,.03)", transition: "background .12s" }}
-                          onMouseEnter={e => (e.currentTarget.style.background = "rgba(99,102,241,.04)")}
-                          onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-                        >
-                          {/* System */}
-                          <td style={{ padding: "11px 16px", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis" }}>
-                            <span style={{ color: "#64748b", fontSize: ".76rem", fontWeight: 500 }} title={h.system_description}>
-                              {h.system_description}
-                            </span>
-                          </td>
-
-                          {/* Threat */}
-                          <td style={{ padding: "11px 16px", maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis" }}>
-                            <span style={{ color: "#cbd5e1", fontWeight: 600, fontSize: ".8rem" }} title={h.threat}>
-                              {h.threat}
-                            </span>
-                          </td>
-
-                          {/* STRIDE */}
-                          <td style={{ padding: "11px 16px" }}>
-                            <StrideBadge value={h.stride} />
-                          </td>
-
-                          {/* Likelihood */}
-                          <td style={{ padding: "11px 16px", color: "#475569", fontSize: ".76rem" }}>
-                            {h.likelihood}
-                          </td>
-
-                          {/* Impact */}
-                          <td style={{ padding: "11px 16px", color: "#475569", fontSize: ".76rem" }}>
-                            {h.impact}
-                          </td>
-
-                          {/* Score */}
-                          <td style={{ padding: "11px 16px", textAlign: "center" }}>
-                            <ScoreCell score={h.risk_score ?? 0} />
-                          </td>
-
-                          {/* Risk level */}
-                          <td style={{ padding: "11px 16px", textAlign: "center" }}>
-                            <RiskBadge level={h.risk_level} />
-                          </td>
-
-                          {/* Confidence */}
-                          <td style={{ padding: "11px 16px", textAlign: "center" }}>
-                            <ConfBadge value={h.confidence ?? null} />
-                          </td>
-
-                          {/* Mitigation */}
-                          <td style={{ padding: "11px 16px", maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", color: "#334155", fontSize: ".74rem", lineHeight: 1.45 }} title={h.mitigation}>
-                            {h.mitigation}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            )}
-          </div>
         </div>
       </div>
     </div>

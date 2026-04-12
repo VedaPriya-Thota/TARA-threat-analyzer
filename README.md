@@ -35,7 +35,7 @@ Traditional threat modeling is manual, slow, and expert-gated. TARA makes it ins
 | Feature | Description |
 |---|---|
 | LLM Threat Generation | GROQ-hosted LLaMA 3.3-70B generates contextual, stack-aware threats |
-| STRIDE Classification | Every threat is mapped to one of the six STRIDE categories |
+| STRIDE Classification | Every threat is mapped to one of the six STRIDE categories |spoofing| tampring | Repudiation | Information Disclosure | Denial of service | Elevation of privilege
 | Dynamic Risk Scoring | `Risk Score = Likelihood × Impact` (both on a 1/3/5 scale) |
 | Why This Threat | Short explanation of why the specific system is vulnerable |
 | Attack Impact Simulation | 2–4 concrete consequences if the threat is exploited |

@@ -7,13 +7,15 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid
 } from "recharts";
 import {
-  AlertTriangle, ShieldAlert, Target, ShieldCheck, Download, AlertCircle, TrendingUp, Cpu
+  AlertTriangle, ShieldAlert, Target, ShieldCheck, Download, AlertCircle, TrendingUp, Cpu,
+  CheckCircle2, ChevronDown
 } from "lucide-react";
 
 export default function ReportsPage() {
   const [reportData, setReportData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [openStride, setOpenStride] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const fetchReport = async () => {
@@ -356,31 +358,156 @@ export default function ReportsPage() {
               </div>
 
               {/* ── SECTION 6: MITIGATION PLAN ── */}
-              <div className="rounded-2xl" style={{ background: "rgba(10,15,28,.9)", border: "1px solid rgba(30,41,59,.9)", padding: "22px 24px" }}>
-                <div className="flex items-center gap-2 mb-5">
-                  <div style={{ background: "rgba(34,197,94,.1)", padding: 7, borderRadius: 9, display: "inline-flex" }}>
-                    <ShieldCheck size={16} style={{ color: "#22c55e" }} />
-                  </div>
-                  <h3 className="font-bold text-base text-slate-200">Consolidated Mitigation Plan</h3>
-                  <span className="ml-auto text-xs font-medium px-2.5 py-1 rounded-full" style={{ color: "#475569", background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.05)" }}>
-                    {mitigationsSet.size} action{mitigationsSet.size !== 1 ? "s" : ""}
-                  </span>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {Array.from(mitigationsSet).map((mitigation, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-start gap-3 rounded-xl transition-colors"
-                      style={{ background: "rgba(7,11,22,.7)", border: "1px solid rgba(30,41,59,.7)", padding: "14px 16px" }}
-                    >
-                      <div style={{ background: "rgba(34,197,94,.12)", border: "1px solid rgba(34,197,94,.2)", padding: 6, borderRadius: 8, flexShrink: 0, marginTop: 1 }}>
-                        <ShieldCheck size={12} style={{ color: "#22c55e" }} />
+              {(() => {
+                const riskOrder: Record<string, number> = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+                const levelColor: Record<string, string> = {
+                  Critical: "#ef4444", High: "#f97316", Medium: "#f59e0b", Low: "#22c55e",
+                };
+
+                // STRIDE category display config
+                const strideConfig: Record<string, { label: string; short: string; color: string; bg: string; border: string }> = {
+                  Spoofing:             { label: "Spoofing",              short: "S", color: "#f472b6", bg: "rgba(244,114,182,.08)", border: "rgba(244,114,182,.2)" },
+                  Tampering:            { label: "Tampering",             short: "T", color: "#fb923c", bg: "rgba(251,146,60,.08)",  border: "rgba(251,146,60,.2)"  },
+                  Repudiation:          { label: "Repudiation",           short: "R", color: "#a78bfa", bg: "rgba(167,139,250,.08)", border: "rgba(167,139,250,.2)" },
+                  "Information Disclosure": { label: "Information Disclosure", short: "I", color: "#38bdf8", bg: "rgba(56,189,248,.08)",  border: "rgba(56,189,248,.2)"  },
+                  "Denial of Service":  { label: "Denial of Service",     short: "D", color: "#f87171", bg: "rgba(248,113,113,.08)", border: "rgba(248,113,113,.2)" },
+                  "Elevation of Privilege": { label: "Elevation of Privilege", short: "E", color: "#facc15", bg: "rgba(250,204,21,.08)",  border: "rgba(250,204,21,.2)"  },
+                };
+
+                // Group by STRIDE, within each group sort by risk severity
+                const grouped: Record<string, typeof reportData> = {};
+                reportData
+                  .filter(t => t.mitigation)
+                  .forEach(t => {
+                    const key = t.stride || "Unknown";
+                    if (!grouped[key]) grouped[key] = [];
+                    grouped[key].push(t);
+                  });
+                Object.values(grouped).forEach(arr =>
+                  arr.sort((a, b) => (riskOrder[a.risk_level] ?? 4) - (riskOrder[b.risk_level] ?? 4))
+                );
+
+                // Order groups by STRIDE canonical order
+                const strideOrder = ["Spoofing","Tampering","Repudiation","Information Disclosure","Denial of Service","Elevation of Privilege"];
+                const sortedGroups = Object.keys(grouped).sort(
+                  (a, b) => (strideOrder.indexOf(a) ?? 99) - (strideOrder.indexOf(b) ?? 99)
+                );
+
+                const totalActions = reportData.filter(t => t.mitigation).length;
+
+                return (
+                  <div className="rounded-2xl overflow-hidden" style={{ background: "rgba(10,15,28,.9)", border: "1px solid rgba(30,41,59,.9)" }}>
+                    {/* Header */}
+                    <div className="flex items-center gap-2.5 px-6 py-4" style={{ borderBottom: "1px solid rgba(30,41,59,.8)" }}>
+                      <div style={{ background: "rgba(34,197,94,.1)", padding: 7, borderRadius: 9, display: "inline-flex" }}>
+                        <ShieldCheck size={16} style={{ color: "#22c55e" }} />
                       </div>
-                      <p className="text-sm leading-relaxed" style={{ color: "#94a3b8" }}>{mitigation}</p>
+                      <h3 className="font-bold text-base text-slate-200">Mitigation Plan</h3>
+                      {/* STRIDE group pills */}
+                      <div className="hidden md:flex items-center gap-1.5 ml-4 flex-wrap">
+                        {sortedGroups.map(g => {
+                          const cfg = strideConfig[g];
+                          return cfg ? (
+                            <span key={g} className="text-xs font-bold px-2 py-0.5 rounded-full"
+                              style={{ color: cfg.color, background: cfg.bg, border: `1px solid ${cfg.border}` }}>
+                              {cfg.short} · {grouped[g].length}
+                            </span>
+                          ) : null;
+                        })}
+                      </div>
+                      <span className="ml-auto text-xs font-medium px-2.5 py-1 rounded-full flex-shrink-0"
+                        style={{ color: "#475569", background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.05)" }}>
+                        {totalActions} action{totalActions !== 1 ? "s" : ""}
+                      </span>
                     </div>
-                  ))}
-                </div>
-              </div>
+
+                    {/* Groups */}
+                    <div className="divide-y" style={{ borderColor: "rgba(30,41,59,.6)" }}>
+                      {sortedGroups.map(strideKey => {
+                        const cfg = strideConfig[strideKey] || { label: strideKey, color: "#94a3b8", bg: "rgba(148,163,184,.06)", border: "rgba(148,163,184,.15)" };
+                        const threats = grouped[strideKey];
+                        const isOpen = !!openStride[strideKey];
+                        return (
+                          <div key={strideKey}>
+                            {/* Accordion toggle header */}
+                            <button
+                              onClick={() => setOpenStride(prev => ({ ...prev, [strideKey]: !prev[strideKey] }))}
+                              className="w-full flex items-center gap-3 px-6 py-3.5 transition-colors duration-150 text-left"
+                              style={{ background: isOpen ? cfg.bg : "transparent", borderBottom: isOpen ? `1px solid ${cfg.border}` : "none" }}
+                              onMouseEnter={e => { if (!isOpen) (e.currentTarget as HTMLElement).style.background = `${cfg.bg}`; }}
+                              onMouseLeave={e => { if (!isOpen) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                            >
+                              <div className="w-5 h-5 rounded flex items-center justify-center text-xs font-black flex-shrink-0"
+                                style={{ background: `${cfg.color}20`, color: cfg.color, border: `1px solid ${cfg.color}30` }}>
+                                {cfg.label[0]}
+                              </div>
+                              <span className="text-xs font-bold uppercase tracking-widest" style={{ color: cfg.color }}>
+                                {cfg.label}
+                              </span>
+                              <span className="text-xs font-medium ml-1" style={{ color: `${cfg.color}60` }}>
+                                — {threats.length} threat{threats.length !== 1 ? "s" : ""}
+                              </span>
+                              <ChevronDown
+                                size={14}
+                                className="ml-auto flex-shrink-0 transition-transform duration-200"
+                                style={{ color: cfg.color, opacity: 0.6, transform: isOpen ? "rotate(180deg)" : "rotate(0deg)" }}
+                              />
+                            </button>
+
+                            {/* Collapsible rows */}
+                            {isOpen && (
+                              <table className="w-full text-sm">
+                                <tbody>
+                                  {threats.map((t, idx) => {
+                                    const rColor = levelColor[t.risk_level] || "#94a3b8";
+                                    const isLast = idx === threats.length - 1;
+                                    return (
+                                      <tr
+                                        key={idx}
+                                        style={{ borderBottom: isLast ? "none" : "1px solid rgba(255,255,255,.04)" }}
+                                        onMouseEnter={e => (e.currentTarget.style.background = "rgba(99,102,241,.04)")}
+                                        onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                                      >
+                                        {/* Risk badge */}
+                                        <td className="px-6 py-3.5 whitespace-nowrap" style={{ width: 110 }}>
+                                          <div className="flex items-center gap-1.5">
+                                            <span style={{ width: 6, height: 6, borderRadius: "50%", background: rColor, boxShadow: `0 0 4px ${rColor}`, flexShrink: 0, display: "inline-block" }} />
+                                            <span className="text-xs font-bold" style={{ color: rColor }}>{t.risk_level}</span>
+                                          </div>
+                                        </td>
+
+                                        {/* Threat */}
+                                        <td className="px-4 py-3.5" style={{ width: "28%" }}>
+                                          <span className="text-sm font-semibold text-slate-200 leading-snug" title={t.threat}>
+                                            {t.threat}
+                                          </span>
+                                        </td>
+
+                                        {/* Arrow separator */}
+                                        <td className="py-3.5 text-center" style={{ width: 28, color: "#1e293b" }}>→</td>
+
+                                        {/* Mitigation */}
+                                        <td className="px-4 py-3.5">
+                                          <div className="flex items-start gap-2">
+                                            <CheckCircle2 size={13} style={{ color: "#22c55e", flexShrink: 0, marginTop: 2, opacity: 0.8 }} />
+                                            <span className="text-sm leading-relaxed" style={{ color: "#94a3b8" }}>
+                                              {t.mitigation}
+                                            </span>
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
 
             </>
           )}

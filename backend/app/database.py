@@ -7,7 +7,7 @@ load_dotenv()
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "your_db_url"
+    "mysql+pymysql://root:Sudha%402006@localhost/tara_db"
 )
 
 engine = create_engine(DATABASE_URL)

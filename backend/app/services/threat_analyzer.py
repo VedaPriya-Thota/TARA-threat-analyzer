@@ -1,3 +1,17 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# services/threat_analyzer.py — Thin orchestration wrapper for threat analysis
+#
+# This module acts as a service-layer bridge between the route handlers and the
+# LLM client. It calls analyze_with_llm() and returns the resulting threat list.
+#
+# If the LLM call raises an unexpected exception, a local rule-based fallback
+# kicks in — it checks the system_description for keywords ("database", "login",
+# "api") and returns generic threat dicts for those categories.
+#
+# The primary pipeline (GROQ → Ollama → local engine) is fully handled inside
+# llm_client.py. This module only adds a safety net for uncaught exceptions.
+# ─────────────────────────────────────────────────────────────────────────────
+
 from app.llm.llm_client import analyze_with_llm
 
 
@@ -5,6 +19,7 @@ def analyze_threats(system_description: str):
     """
     Thin wrapper around the LLM client.
     Returns a list of threat dicts — already normalised by llm_client.
+    Falls back to keyword-based threats if an uncaught exception occurs.
     """
     try:
         result = analyze_with_llm(system_description)

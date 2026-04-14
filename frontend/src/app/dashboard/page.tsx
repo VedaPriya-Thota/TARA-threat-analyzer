@@ -591,11 +591,7 @@ function AIInsights({ threats }: { threats: any[] }) {
   const focusArea = top.category || top.stride || "Authentication"
 
   return (
-    <div style={{
-      background: "rgba(10,15,28,.9)",
-      border: "1px solid rgba(56,189,248,.12)",
-      borderRadius: 14,
-      padding: "14px 18px",
+    <div className="ai-insights-card card-glow-cyan" style={{
       marginBottom: 16,
       display: "flex",
       gap: 0,

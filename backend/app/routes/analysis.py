@@ -1,3 +1,23 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# routes/analysis.py — API routes for all threat analysis operations
+#
+# Base path: /analysis
+#
+# Endpoints:
+#   POST   /analysis/         — Text-based analysis: accepts a system description
+#                               string, calls the LLM pipeline, persists results
+#   POST   /analysis/upload   — File-based analysis: accepts an uploaded file
+#                               (YAML / JSON / TXT / LOG), extracts hints, calls LLM
+#   POST   /analysis/url      — URL surface analysis: fetches metadata from a URL
+#                               or GitHub repo and runs LLM-based threat analysis
+#   GET    /analysis/history  — Returns all stored threat records from the DB
+#   DELETE /analysis/history  — Clears all threat history from the DB
+#
+# Shared helper functions (_parse_json_field, _score_to_risk, _score_to_priority,
+# _build_result_dict, _persist_threat) are used across all three analysis routes
+# to avoid duplication in scoring, DB persistence, and response building.
+# ─────────────────────────────────────────────────────────────────────────────
+
 import json
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from sqlalchemy.orm import Session

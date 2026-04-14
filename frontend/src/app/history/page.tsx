@@ -1,3 +1,23 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// history/page.tsx — Threat History page
+//
+// Fetches all stored threat records from GET /analysis/history and organises
+// them into per-session cards grouped by system_description.
+//
+// Features:
+//   - SessionCard component: shows a collapsible summary card for each unique
+//     analysis input, listing threat counts and severity breakdown
+//   - Expandable threat table inside each card (sorted by risk score descending)
+//   - Re-run button: navigates to /dashboard with the original description
+//     pre-filled via query param (?q=...) so the user can re-analyse it
+//   - Search bar: filters sessions and threats by keyword in real time
+//   - Sort controls: sort sessions by Top Risk score, Most Threats, or A–Z
+//
+// Helper components (RiskBadge, StrideBadge, ConfBadge, ScoreCell) are defined
+// at the top of the file to render individual threat table cells with
+// consistent color-coded styling.
+// ─────────────────────────────────────────────────────────────────────────────
+
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
@@ -269,27 +289,76 @@ export default function HistoryPage() {
         <div style={{ maxWidth: 1100, margin: "0 auto" }}>
 
           {/* ── Page header ── */}
-          <div style={{ marginBottom: 28, paddingBottom: 20, borderBottom: "1px solid rgba(30,41,59,.8)", animation: "fade-up 200ms ease both" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#818cf8", boxShadow: "0 0 6px #818cf8", display: "inline-block", animation: "live-ring-cyan 2.4s ease-out infinite" }} />
-              <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "#818cf8" }}>
-                Intelligence Records
-              </span>
+          <div className="page-header-section">
+            <div className="page-header-eyebrow">
+              <span className="page-header-eyebrow-dot" style={{ background: "#818cf8", boxShadow: "0 0 6px #818cf8", animation: "pulse-dot 2.4s ease-in-out infinite" }} />
+              <span className="page-header-eyebrow-text" style={{ color: "#818cf8" }}>Intelligence Records</span>
             </div>
-            <h1 style={{
-              fontSize: "clamp(1.8rem, 3vw, 2.4rem)", fontWeight: 900, letterSpacing: "-.03em",
-              background: "linear-gradient(135deg, #818cf8, #c084fc)",
-              WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
-              backgroundClip: "text", margin: 0,
-            }}>
-              Threat History
-            </h1>
-            <p style={{ marginTop: 6, fontSize: ".85rem", color: "#475569" }}>
+            <h1 className="page-header-title">Threat History</h1>
+            <p className="page-header-sub">
               {sessions.length > 0
                 ? `${sessions.length} past analysis session${sessions.length !== 1 ? "s" : ""} · ${totalThreats} total threats — click Re-run to load any session back into the dashboard.`
                 : "All previous threat intelligence scans."}
             </p>
           </div>
+
+          {/* ── Stats bar ── */}
+          {!loading && !error && sessions.length > 0 && (() => {
+            const critical = history.filter(t => t.risk_level?.toLowerCase() === "critical").length;
+            const topStride = (() => {
+              const freq: Record<string,number> = {};
+              history.forEach(t => { if (t.stride) freq[t.stride] = (freq[t.stride] || 0) + 1; });
+              return Object.entries(freq).sort((a,b) => b[1]-a[1])[0]?.[0] ?? "N/A";
+            })();
+            return (
+              <div className="hist-stat-bar">
+                <div className="hist-stat-pill">
+                  <div className="hist-stat-icon" style={{ background: "rgba(129,140,248,.1)", border: "1px solid rgba(129,140,248,.18)", color: "#818cf8" }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+                    </svg>
+                  </div>
+                  <div className="hist-stat-body">
+                    <span className="hist-stat-num" style={{ color: "#818cf8" }}>{sessions.length}</span>
+                    <span className="hist-stat-label">Sessions</span>
+                  </div>
+                </div>
+                <div className="hist-stat-pill">
+                  <div className="hist-stat-icon" style={{ background: "rgba(239,68,68,.08)", border: "1px solid rgba(239,68,68,.18)", color: "#f87171" }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                  </div>
+                  <div className="hist-stat-body">
+                    <span className="hist-stat-num" style={{ color: "#f87171" }}>{totalThreats}</span>
+                    <span className="hist-stat-label">Total Threats</span>
+                  </div>
+                </div>
+                <div className="hist-stat-pill">
+                  <div className="hist-stat-icon" style={{ background: "rgba(239,68,68,.08)", border: "1px solid rgba(239,68,68,.15)", color: "#ef4444" }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                  </div>
+                  <div className="hist-stat-body">
+                    <span className="hist-stat-num" style={{ color: "#ef4444", fontSize: "1rem" }}>{critical}</span>
+                    <span className="hist-stat-label">Critical Threats</span>
+                  </div>
+                </div>
+                <div className="hist-stat-pill">
+                  <div className="hist-stat-icon" style={{ background: "rgba(99,102,241,.08)", border: "1px solid rgba(99,102,241,.18)", color: "#818cf8" }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                    </svg>
+                  </div>
+                  <div className="hist-stat-body">
+                    <span className="hist-stat-num" style={{ color: "#a5b4fc", fontSize: ".85rem", fontWeight: 800 }}>{topStride}</span>
+                    <span className="hist-stat-label">Top STRIDE Vector</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* ── Loading ── */}
           {loading && (

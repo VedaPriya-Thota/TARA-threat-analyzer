@@ -1,3 +1,23 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// settings/page.tsx — Platform Settings page
+//
+// Allows users to configure TARA's analysis behaviour and view system status.
+//
+// Sections:
+//   - AI Configuration    : displays the active LLM provider, model, and mode
+//   - System Status       : pings the backend on load and shows live status dots
+//                           for Backend Server, LLM Inference Node, and Database
+//   - Risk Scoring Behavior : toggle between Dynamic (likelihood × impact) and
+//                             Static (legacy string-based) scoring modes
+//   - Analysis Parameters : slider to set max threats per analysis (1–10),
+//                           toggle to show/hide AI confidence scores in reports
+//   - Danger Zone         : button to permanently delete all threat history via
+//                           DELETE /analysis/history
+//
+// State is persisted to localStorage so settings survive page refreshes.
+// Toast notifications confirm successful actions or surface API errors.
+// ─────────────────────────────────────────────────────────────────────────────
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -168,18 +188,13 @@ export default function SettingsPage() {
         <div className="max-w-4xl mx-auto">
 
           {/* ── Page header ── */}
-          <div className="mb-8 pb-6" style={{ borderBottom: "1px solid rgba(30,41,59,.8)" }}>
-            <div className="flex items-center gap-2 mb-2">
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#818cf8", boxShadow: "0 0 6px #818cf8", display: "inline-block" }} />
-              <span className="text-xs font-bold uppercase tracking-widest" style={{ color: "#818cf8" }}>Configuration</span>
+          <div className="page-header-section mb-8">
+            <div className="page-header-eyebrow">
+              <span className="page-header-eyebrow-dot" style={{ background: "#818cf8", boxShadow: "0 0 6px #818cf8", animation: "pulse-dot 2.4s ease-in-out infinite" }} />
+              <span className="page-header-eyebrow-text" style={{ color: "#818cf8" }}>Configuration</span>
             </div>
-            <h1 className="text-3xl font-black tracking-tight bg-clip-text text-transparent flex items-center gap-3"
-              style={{ backgroundImage: "linear-gradient(135deg, #818cf8, #c084fc)" }}>
-              Platform Settings
-            </h1>
-            <p className="mt-1.5 text-sm" style={{ color: "#475569" }}>
-              Manage AI configurations, system thresholds, and analysis behaviour.
-            </p>
+            <h1 className="page-header-title">Platform Settings</h1>
+            <p className="page-header-sub">Manage AI configurations, system thresholds, and analysis behaviour.</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -307,21 +322,11 @@ export default function SettingsPage() {
                 {/* Toggle */}
                 <button
                   onClick={() => setShowConfidence(v => !v)}
-                  style={{
-                    position: "relative", width: 42, height: 24, borderRadius: 999, flexShrink: 0, cursor: "pointer", border: "none",
-                    background: showConfidence ? "#4f46e5" : "rgba(255,255,255,.08)",
-                    boxShadow: showConfidence ? "0 0 12px rgba(79,70,229,.4)" : "none",
-                    transition: "background .2s, box-shadow .2s",
-                  }}
+                  className={`settings-toggle-track ${showConfidence ? "settings-toggle-track--on" : "settings-toggle-track--off"}`}
+                  style={{ border: "none" }}
+                  aria-label="Toggle show confidence"
                 >
-                  <span style={{
-                    position: "absolute", top: 3, left: showConfidence ? 21 : 3,
-                    width: 18, height: 18, borderRadius: "50%",
-                    background: showConfidence ? "#fff" : "#334155",
-                    boxShadow: "0 1px 4px rgba(0,0,0,.4)",
-                    transition: "left .2s, background .2s",
-                    display: "inline-block",
-                  }} />
+                  <span className={`settings-toggle-knob ${showConfidence ? "settings-toggle-knob--on" : "settings-toggle-knob--off"}`} />
                 </button>
               </div>
             </SettingsCard>
@@ -345,22 +350,24 @@ export default function SettingsPage() {
               </p>
               <button
                 onClick={clearHistory}
-                className="flex items-center gap-2 font-semibold text-sm transition-all duration-200 shrink-0 group"
+                className="action-btn"
                 style={{
-                  background: "rgba(239,68,68,.08)",
-                  border: "1px solid rgba(239,68,68,.25)",
+                  background: "rgba(239,68,68,.1)",
+                  border: "1px solid rgba(239,68,68,.28)",
                   color: "#f87171",
-                  padding: "9px 18px",
-                  borderRadius: 10,
+                  boxShadow: "0 2px 12px rgba(239,68,68,.12)",
                   whiteSpace: "nowrap",
+                  flexShrink: 0,
                 }}
                 onMouseEnter={e => {
-                  (e.currentTarget as HTMLButtonElement).style.background = "#ef4444";
+                  (e.currentTarget as HTMLButtonElement).style.background = "linear-gradient(135deg,#7f1d1d,#ef4444)";
                   (e.currentTarget as HTMLButtonElement).style.color = "#fff";
+                  (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 20px rgba(239,68,68,.4)";
                 }}
                 onMouseLeave={e => {
-                  (e.currentTarget as HTMLButtonElement).style.background = "rgba(239,68,68,.08)";
+                  (e.currentTarget as HTMLButtonElement).style.background = "rgba(239,68,68,.1)";
                   (e.currentTarget as HTMLButtonElement).style.color = "#f87171";
+                  (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 2px 12px rgba(239,68,68,.12)";
                 }}
               >
                 <Trash2 size={15} />

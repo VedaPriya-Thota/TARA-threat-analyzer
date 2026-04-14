@@ -1,3 +1,25 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// reports/page.tsx — Security Threat Report page
+//
+// Fetches all analysis records from GET /analysis/history and renders a
+// comprehensive security report with the following sections:
+//
+//   1. Header            : report title, system name, generation timestamp,
+//                          and a Download PDF button (triggers window.print)
+//   2. Critical Alert    : banner shown when the highest-risk threat is Critical
+//   3. Risk Summary Cards: four cards showing counts for Critical/High/Medium/Low
+//   4. Risk Distribution : bar chart (Recharts) visualising threat counts by level
+//   5. AI Insights       : overall risk level, most common STRIDE vector,
+//                          average AI confidence with a progress bar
+//   6. Identified Threats: scrollable table of all threats with STRIDE, score,
+//                          risk level, and confidence columns
+//   7. Mitigation Plan   : collapsible accordion grouped by STRIDE category.
+//                          Each group lists threats → recommended actions.
+//                          Groups are collapsed by default; click to expand.
+//
+// openStride state tracks which STRIDE accordion groups are currently open.
+// ─────────────────────────────────────────────────────────────────────────────
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -114,9 +136,16 @@ export default function ReportsPage() {
         <div className="max-w-7xl mx-auto space-y-8" id="report-container">
 
           {loading ? (
-            <div className="flex flex-col items-center justify-center p-20 min-h-[50vh]">
-              <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-              <p className="mt-4 text-slate-400 font-medium">Analyzing intelligence...</p>
+            <div className="rp-skeleton-wrap">
+              <div className="skeleton-block rp-skeleton-header" />
+              <div className="rp-skeleton-cards">
+                {[0,1,2,3].map(i => <div key={i} className="skeleton-block rp-skeleton-card" />)}
+              </div>
+              <div className="rp-skeleton-body">
+                <div className="skeleton-block rp-skeleton-chart" />
+                <div className="skeleton-block rp-skeleton-aside" />
+              </div>
+              <div className="skeleton-block rp-skeleton-table" />
             </div>
           ) : error ? (
             <div className="flex flex-col items-center justify-center p-20 rounded-2xl" style={{ background: "rgba(10,15,28,.85)", border: "1px solid rgba(30,41,59,.9)" }}>
@@ -131,34 +160,25 @@ export default function ReportsPage() {
           ) : (
             <>
               {/* ── SECTION 1: HEADER ── */}
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-5 pb-6" style={{ borderBottom: "1px solid rgba(30,41,59,.8)" }}>
+              <div className="page-header-section" style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16 }}>
                 <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#818cf8", boxShadow: "0 0 6px #818cf8", display: "inline-block" }} />
-                    <span className="text-xs font-bold uppercase tracking-widest text-indigo-400">Security Report</span>
+                  <div className="page-header-eyebrow">
+                    <span className="page-header-eyebrow-dot" style={{ background: "#818cf8", boxShadow: "0 0 6px #818cf8", animation: "pulse-dot 2.4s ease-in-out infinite" }} />
+                    <span className="page-header-eyebrow-text" style={{ color: "#818cf8" }}>Security Report</span>
                   </div>
-                  <h1 className="text-3xl font-black tracking-tight bg-clip-text text-transparent"
-                    style={{ backgroundImage: "linear-gradient(135deg, #818cf8, #c084fc)" }}>
-                    Security Threat Report
-                  </h1>
-                  <p className="text-slate-400 mt-1.5 text-sm">
-                    System: <span className="text-slate-200 font-semibold">{latestSystemDesc}</span>
+                  <h1 className="page-header-title">Security Threat Report</h1>
+                  <p className="page-header-sub">
+                    System: <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{latestSystemDesc}</span>
                   </p>
-                  <p className="text-slate-600 text-xs mt-0.5">Generated: {new Date().toLocaleString()}</p>
+                  <p style={{ color: "#334155", fontSize: ".72rem", marginTop: 3 }}>Generated: {new Date().toLocaleString()}</p>
                 </div>
 
                 <button
                   onClick={handleDownloadPdf}
-                  className="flex items-center gap-2.5 font-semibold text-sm text-white transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 whitespace-nowrap"
-                  style={{
-                    background: "linear-gradient(135deg, #4f46e5, #7c3aed)",
-                    padding: "10px 20px",
-                    borderRadius: 10,
-                    border: "1px solid rgba(129,140,248,.3)",
-                    boxShadow: "0 0 20px rgba(79,70,229,.25), 0 4px 12px rgba(0,0,0,.3)",
-                  }}
+                  className="action-btn export-btn"
+                  style={{ alignSelf: "flex-start", marginTop: 4 }}
                 >
-                  <Download size={16} />
+                  <Download size={15} />
                   Download PDF
                 </button>
               </div>

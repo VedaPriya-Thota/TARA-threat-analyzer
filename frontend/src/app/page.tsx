@@ -121,6 +121,7 @@ const FEATURES = [
     gradBorder: "linear-gradient(135deg,#0e7490,#0284c7)",
     title: "Threat Detection",
     body:  "Automatically surface SQL injection, auth bypass, API abuse, and privilege escalation — mapped to attack vectors before adversaries exploit them.",
+    link:  "/dashboard",
   },
   {
     icon: (
@@ -135,6 +136,7 @@ const FEATURES = [
     gradBorder: "linear-gradient(135deg,#166534,#0e7490)",
     title: "AI Risk Scoring",
     body:  "LLM-powered analysis calculates risk scores and prioritises threats by severity, exploitability, and blast radius — so you fix what matters first.",
+    link:  "/reports",
   },
   {
     icon: (
@@ -149,6 +151,7 @@ const FEATURES = [
     gradBorder: "linear-gradient(135deg,#4c1d95,#be185d)",
     title: "STRIDE Classification",
     body:  "Every threat is mapped to the STRIDE framework with targeted mitigations — giving your team a structured, actionable security report.",
+    link:  "/reports",
   },
 ]
 
@@ -157,12 +160,14 @@ const SCAN_WORDS = ["REST APIs", "cloud infrastructure", "IoT firmware", "micros
 /* ── Feature card (isolated so hover state is per-card) ── */
 function FeatureCard({ f, delay }: { f: typeof FEATURES[number]; delay: number }) {
   const [hovered, setHovered] = useState(false)
+  const router = useRouter()
   return (
     <div
       className="lp-feat-card"
-      style={{ animationDelay: `${delay}s` }}
+      style={{ animationDelay: `${delay}s`, cursor: f.link ? "pointer" : "default" }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      onClick={() => f.link && router.push(f.link)}
     >
       {/* gradient border via box-shadow inset + pseudo — simulated with wrapper */}
       <div
@@ -202,12 +207,14 @@ function FeatureCard({ f, delay }: { f: typeof FEATURES[number]; delay: number }
         <p className="lp-feat-body">{f.body}</p>
 
         {/* Arrow reveal on hover */}
-        <div className="lp-feat-arrow" style={{ opacity: hovered ? .7 : 0, transform: hovered ? "translateX(0)" : "translateX(-6px)", color: f.accent }}>
-          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="2" y1="8" x2="14" y2="8"/><polyline points="9,3 14,8 9,13"/>
-          </svg>
-          <span style={{ fontSize: ".72rem", fontWeight: 700 }}>Learn more</span>
-        </div>
+        {f.link && (
+          <div className="lp-feat-arrow" style={{ opacity: hovered ? .85 : 0, transform: hovered ? "translateX(0)" : "translateX(-6px)", color: f.accent }}>
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="2" y1="8" x2="14" y2="8"/><polyline points="9,3 14,8 9,13"/>
+            </svg>
+            <span style={{ fontSize: ".72rem", fontWeight: 700 }}>Learn more</span>
+          </div>
+        )}
       </div>
     </div>
   )

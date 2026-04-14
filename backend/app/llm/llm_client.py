@@ -1,3 +1,34 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# llm/llm_client.py — Core LLM inference engine for text-based threat analysis
+#
+# This is the main AI brain of TARA. It handles all text-based threat analysis
+# (plain descriptions and user stories) through a three-tier fallback pipeline:
+#
+#   1. GROQ (primary)     : calls the llama-3.3-70b-versatile model via the Groq
+#                           cloud API for fast, high-quality inference
+#   2. Ollama (secondary) : falls back to a locally running llama3.2:1b model if
+#                           GROQ is unavailable or returns an error
+#   3. Local engine       : pure rule-based threats keyed to the detected system
+#                           context (Financial, IoT, Cloud, API, General) —
+#                           requires no external service
+#
+# User story detection:
+#   - is_user_story() checks the input for user story patterns ("As a ...",
+#     "I want to ...", "Given ...", etc.)
+#   - If detected, call_groq_user_story() runs a shift-left security review
+#     focused on authorization, business logic, and repudiation risks
+#   - Falls back to _user_story_fallback() which generates rule-based threats
+#     for authorization, repudiation, input validation, and rate limiting
+#
+# Utility functions shared with file_analyzer.py and url_analyzer.py:
+#   - detect_context()    : infers system type from keywords in the description
+#   - map_stride()        : maps a threat name to the most likely STRIDE category
+#   - extract_json()      : robustly parses JSON from LLM output (handles markdown)
+#   - normalize_threat()  : validates and fills missing fields in a threat dict,
+#                           ensures why_flagged, attack_impact, and
+#                           mitigation_steps are always populated lists/strings
+# ─────────────────────────────────────────────────────────────────────────────
+
 import os
 import json
 import re
@@ -7,7 +38,7 @@ from groq import Groq
 import requests
 
 # =========================
-# 🔥 LOAD .ENV
+# LOAD .ENV
 # =========================
 env_path = Path(__file__).resolve().parent.parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)

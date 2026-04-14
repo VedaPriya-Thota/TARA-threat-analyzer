@@ -20,7 +20,7 @@ load_dotenv()
 # Read DB connection string from environment; fall back to local MySQL dev DB
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "mysql+pymysql://root:Sudha%402006@localhost/tara_db"
+    "your_db_url"
 )
 
 # Engine manages the connection pool to the database

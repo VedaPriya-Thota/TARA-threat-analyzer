@@ -97,7 +97,7 @@ Visual representation of system risk using computed scoring across all detected 
 #### 🕘 History — All Past Analyses
 Track and review previously analyzed systems with full persistence via MySQL.
 
-![History Page](assets/history-page.png)
+![History Page](assets/threat-report.png)
 
 ---
 

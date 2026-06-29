@@ -66,7 +66,7 @@ It's threat modeling that scales with how fast modern teams actually ship.
 
 ## 📥 Input Modes Supported
 
-Text Description Mode (Core Input)
+### Text Description Mode (Core Input)
 
 Natural language system description
 Architecture explanations
@@ -76,7 +76,8 @@ Threat modeling from scratch
 Example: As an admin,I want to export all user data as CSV so that I can share report with stakeholders.
 
 ---
-File Upload Mode (Structured Systems)
+
+### File Upload Mode (Structured Systems)
 
 YAML (.yaml, .yml)
 XML (.xml)
@@ -89,8 +90,11 @@ Parses system structure
 Extracts services, databases, APIs, queues, etc.
 Converts configuration into internal architecture graph
 Feeds structured representation into STRIDE analysis engine
+
+
 ---
-Surface Mapper Mode (Repository Analysis)
+
+### Surface Mapper Mode (Repository Analysis)
 
 GitHub repository URL
 Project README + directory structure

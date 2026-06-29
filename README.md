@@ -24,6 +24,7 @@
 ## 📖 Table of Contents
 
 - [Overview](#-overview)
+- [Input Modes Supported](#-input-modes-supported)
 - [System Walkthrough (Visual Tour)](#-system-walkthrough-visual-tour)
 - [Key Features](#-key-features)
 - [How It Works](#-how-it-works)
@@ -50,7 +51,7 @@ Threat modeling is one of the highest-leverage security practices a team can ado
 
 **TARA removes that bottleneck.**
 
-Paste a plain-English description of your system — auth flow, database, cache layer, cloud provider, whatever you've got — and TARA returns a structured, STRIDE-classified threat report: risk-scored, confidence-rated, and mitigated with steps that reference your *actual* stack, not generic advice.
+TARA is a multi-modal AI-powered threat modeling system. Users can provide system context in multiple ways — from plain text descriptions to structured configuration files or even entire GitHub repositories — and TARA generates structured STRIDE-classified threat reports with risk scoring and actionable mitigations.
 
 | Before TARA | With TARA |
 |---|---|
@@ -60,6 +61,49 @@ Paste a plain-English description of your system — auth flow, database, cache 
 | One-time analysis, quickly stale | Re-run on every architecture change |
 
 It's threat modeling that scales with how fast modern teams actually ship.
+
+---
+
+## 📥 Input Modes Supported
+
+Text Description Mode (Core Input)
+
+Natural language system description
+Architecture explanations
+API design descriptions
+Threat modeling from scratch
+
+Example: As an admin,I want to export all user data as CSV so that I can share report with stakeholders.
+
+---
+File Upload Mode (Structured Systems)
+
+YAML (.yaml, .yml)
+XML (.xml)
+JSON (.json)
+Similar structured configuration formats
+
+What it does:
+
+Parses system structure
+Extracts services, databases, APIs, queues, etc.
+Converts configuration into internal architecture graph
+Feeds structured representation into STRIDE analysis engine
+---
+Surface Mapper Mode (Repository Analysis)
+
+GitHub repository URL
+Project README + directory structure
+Service manifests
+
+What it does:
+
+Parses repository structure
+Extracts tech stack automatically
+Identifies exposed endpoints and services
+Performs attack surface mapping
+Detects architecture-level security risks
+Infers implicit trust boundaries
 
 ---
 
@@ -145,13 +189,21 @@ User Input  →  LLM Reasoning  →  STRIDE Mapping  →  Risk Scoring  →  Mit
 
 ## ⚙️ How It Works
 
-1. **User enters a system description** — plain English, no special syntax required
-2. **Backend builds a structured prompt** — domain context (Financial / IoT / Cloud / API / General) is auto-detected first
-3. **LLM returns STRIDE-classified threats** — schema-enforced JSON from LLaMA 3.3-70B via Groq
-4. **Risk engine computes scores** — Likelihood × Impact → Critical / High / Medium / Low
-5. **Mitigation engine enriches output** — adds "why flagged," attack impact, and step-by-step fixes
-6. **Results are persisted to MySQL** — every analysis becomes part of the searchable history
-7. **Frontend visualizes the findings** — dashboard cards, charts, and an exportable PDF report
+1. **User provides input in any supported mode**
+ *Text description OR
+ *Structured file OR
+ *GitHub/repository URL
+2. **Backend normalizes input into a unified system representation**
+
+ *Text → parsed directly
+ *Files → converted into architecture graph
+ *Repos → surface mapper extracts components
+3. System auto-detects domain context (Financial / IoT / Cloud / API / General)
+4. **LLM returns STRIDE-classified threats** — schema-enforced JSON from LLaMA 3.3-70B via Groq
+5. **Risk engine computes scores** — Likelihood × Impact → Critical / High / Medium / Low
+6. **Mitigation engine enriches output** — adds "why flagged," attack impact, and step-by-step fixes
+7. **Results are persisted to MySQL** — every analysis becomes part of the searchable history
+8. **Frontend visualizes the findings** — dashboard cards, charts, and an exportable PDF report
 
 ---
 
@@ -541,3 +593,4 @@ It isn't built to replace security engineers — it's built to give every develo
 *Built with a focus on AI-assisted defense, not AI-assisted guesswork.*
 
 </div>
+
